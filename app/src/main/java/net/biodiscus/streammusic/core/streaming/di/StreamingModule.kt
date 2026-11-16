@@ -1,0 +1,53 @@
+package net.biodiscus.streammusic.core.streaming.di
+
+import dagger.Binds
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import java.util.concurrent.TimeUnit
+import javax.inject.Singleton
+import net.biodiscus.streammusic.core.streaming.aac.AacHttpStreamStarter
+import net.biodiscus.streammusic.core.streaming.aac.AacStreamStarter
+import net.biodiscus.streammusic.core.streaming.device.DeviceStreamerFactory
+import net.biodiscus.streammusic.core.streaming.device.ProtocolDeviceStreamerFactory
+import net.biodiscus.streammusic.core.streaming.device.ariacast.AriaCastConnector
+import net.biodiscus.streammusic.core.streaming.device.ariacast.WebSocketAriaCastConnector
+import net.biodiscus.streammusic.core.streaming.device.cast.CastChannelOpener
+import net.biodiscus.streammusic.core.streaming.device.cast.TlsCastChannelOpener
+import net.biodiscus.streammusic.core.streaming.device.upnp.AvTransportClient
+import net.biodiscus.streammusic.core.streaming.device.upnp.SoapAvTransportClient
+import okhttp3.OkHttpClient
+
+private const val WEB_SOCKET_PING_SECONDS = 10L
+
+@Module
+@InstallIn(SingletonComponent::class)
+internal abstract class StreamingModule {
+
+    @Binds
+    abstract fun bindAvTransportClient(client: SoapAvTransportClient): AvTransportClient
+
+    @Binds
+    abstract fun bindCastChannelOpener(opener: TlsCastChannelOpener): CastChannelOpener
+
+    @Binds
+    abstract fun bindAriaCastConnector(connector: WebSocketAriaCastConnector): AriaCastConnector
+
+    @Binds
+    abstract fun bindDeviceStreamerFactory(factory: ProtocolDeviceStreamerFactory): DeviceStreamerFactory
+
+    @Binds
+    abstract fun bindAacStreamStarter(starter: AacHttpStreamStarter): AacStreamStarter
+
+    companion object {
+        /** A WebSocket that stays open for a whole listening session must not time out while the audio flows. */
+        @Provides
+        @Singleton
+        fun provideOkHttpClient(): OkHttpClient =
+            OkHttpClient.Builder()
+                .readTimeout(0, TimeUnit.MILLISECONDS)
+                .pingInterval(WEB_SOCKET_PING_SECONDS, TimeUnit.SECONDS)
+                .build()
+    }
+}

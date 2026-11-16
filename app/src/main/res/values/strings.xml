@@ -1,0 +1,28 @@
+<resources>
+    <string name="app_name">StreamMusic</string>
+
+    <string name="streaming_channel_name">Streaming</string>
+    <string name="streaming_notification_title">Streaming audio</string>
+    <string name="streaming_notification_stop">Stop</string>
+
+    <string name="devices_title">Devices on your network</string>
+    <string name="devices_search_again">Search again</string>
+    <string name="devices_searching">Searching your network…</string>
+    <string name="devices_discovery_only">Found, but streaming to it is not supported yet</string>
+    <plurals name="devices_continue">
+        <item quantity="one">Stream to %1$d device</item>
+        <item quantity="other">Stream to %1$d devices</item>
+    </plurals>
+    <string name="devices_record_audio_denied">Allow the microphone permission so StreamMusic can capture the audio your phone plays.</string>
+    <string name="devices_permission_title">Allow access to devices on your network</string>
+    <string name="devices_permission_body">StreamMusic needs this permission to find speakers and TVs on your Wi-Fi.</string>
+    <string name="devices_permission_button">Allow</string>
+
+    <string name="streaming_title">Now streaming</string>
+    <string name="streaming_stop">Stop streaming</string>
+    <string name="streaming_status_connecting">Connecting…</string>
+    <string name="streaming_status_streaming">Streaming</string>
+    <string name="streaming_status_failed">Failed: %1$s</string>
+    <string name="streaming_stopped">Streaming has stopped</string>
+    <string name="streaming_back_to_devices">Back to devices</string>
+</resources>
