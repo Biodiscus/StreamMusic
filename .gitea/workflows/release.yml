@@ -2,8 +2,8 @@ name: Release APK
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
 
 jobs:
   release:
@@ -15,6 +15,12 @@ jobs:
       RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITEA_TOKEN }}
+
+      - name: Work out the version
+        run: scripts/app-version.sh >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@v4
         with:
@@ -34,13 +40,19 @@ jobs:
       - name: Build the signed release APK
         run: >
           ./gradlew assembleRelease
-          -PversionName="${GITHUB_REF_NAME#v}"
-          -PversionCode="${{ github.run_number }}"
+          -PversionName="$VERSION_NAME"
+          -PversionCode="$VERSION_CODE"
 
-      - name: Name the APK after the tag
-        run: cp app/build/outputs/apk/release/app-release.apk "StreamMusic-${GITHUB_REF_NAME}.apk"
+      - name: Name the APK after the version
+        run: cp app/build/outputs/apk/release/app-release.apk "StreamMusic-v$VERSION_NAME.apk"
+
+      - name: Tag the commit
+        run: |
+          git tag "v$VERSION_NAME"
+          git push origin "v$VERSION_NAME"
 
       - uses: https://gitea.com/actions/gitea-release-action@v1
         with:
-          files: StreamMusic-${{ github.ref_name }}.apk
+          tag_name: v${{ env.VERSION_NAME }}
+          files: StreamMusic-v${{ env.VERSION_NAME }}.apk
           token: ${{ secrets.GITEA_TOKEN }}
