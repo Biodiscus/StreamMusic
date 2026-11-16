@@ -4,6 +4,8 @@ import net.biodiscus.streammusic.core.model.DeviceProtocol
 import net.biodiscus.streammusic.core.model.DeviceStreamStatus
 import net.biodiscus.streammusic.core.model.StreamingState
 import net.biodiscus.streammusic.testing.aDevice
+import net.biodiscus.streammusic.testing.aGroup
+import net.biodiscus.streammusic.testing.aGroupMember
 import net.biodiscus.streammusic.testing.aNetworkDevice
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -103,5 +105,89 @@ class DevicesUiStateTest {
         val device = aNetworkDevice(aDevice(protocol = DeviceProtocol.DLNA))
 
         assertEquals(false, canChooseProtocol(device, streamStatus = null))
+    }
+
+    @Test
+    fun `two selected devices can be saved as a group`() {
+        val devices = listOf(aNetworkDevice(aDevice(host = "10.0.0.2")), aNetworkDevice(aDevice(host = "10.0.0.3")))
+        val uiState = DevicesUiState.DevicesFound(devices, setOf("10.0.0.2", "10.0.0.3"))
+
+        assertEquals(true, uiState.canSaveGroup)
+    }
+
+    @Test
+    fun `one selected device cannot be saved as a group`() {
+        val devices = listOf(aNetworkDevice(aDevice(host = "10.0.0.2")), aNetworkDevice(aDevice(host = "10.0.0.3")))
+        val uiState = DevicesUiState.DevicesFound(devices, setOf("10.0.0.2"))
+
+        assertEquals(false, uiState.canSaveGroup)
+    }
+
+    @Test
+    fun `a saved group member is the selected device with the protocol it streams with`() {
+        val chromecast = aDevice(name = "TV", protocol = DeviceProtocol.CHROMECAST, host = "10.0.0.2")
+        val uiState = DevicesUiState.DevicesFound(listOf(aNetworkDevice(chromecast)), setOf("10.0.0.2"))
+
+        assertEquals(listOf(aGroupMember("TV", DeviceProtocol.CHROMECAST, "10.0.0.2")), uiState.selectedGroupMembers)
+    }
+
+    @Test
+    fun `a member can stream with every protocol its device speaks`() {
+        val chromecast = aDevice(protocol = DeviceProtocol.CHROMECAST, host = "10.0.0.2")
+        val dlna = aDevice(protocol = DeviceProtocol.DLNA, host = "10.0.0.2")
+        val uiState = DevicesUiState.DevicesFound(listOf(aNetworkDevice(chromecast, dlna)), emptySet())
+
+        val choices = uiState.protocolChoicesFor(aGroupMember(protocol = DeviceProtocol.DLNA, host = "10.0.0.2"))
+
+        assertEquals(listOf(DeviceProtocol.CHROMECAST, DeviceProtocol.DLNA), choices)
+    }
+
+    @Test
+    fun `a member that is offline can only stream with its saved protocol`() {
+        val uiState = DevicesUiState.DevicesFound(emptyList(), emptySet())
+
+        val choices = uiState.protocolChoicesFor(aGroupMember(protocol = DeviceProtocol.DLNA, host = "10.0.0.99"))
+
+        assertEquals(listOf(DeviceProtocol.DLNA), choices)
+    }
+
+    @Test
+    fun `groups are shown while idle`() {
+        val uiState = DevicesUiState.DevicesFound(emptyList(), emptySet(), groups = listOf(aGroup()))
+
+        assertEquals(true, uiState.showsGroups)
+    }
+
+    @Test
+    fun `groups are hidden while streaming`() {
+        val uiState = DevicesUiState.DevicesFound(emptyList(), emptySet(), groups = listOf(aGroup()), isStreaming = true)
+
+        assertEquals(false, uiState.showsGroups)
+    }
+
+    @Test
+    fun `groups are hidden when none is saved`() {
+        val uiState = DevicesUiState.DevicesFound(emptyList(), emptySet())
+
+        assertEquals(false, uiState.showsGroups)
+    }
+
+    @Test
+    fun `there is a stream button while devices are selected`() {
+        val uiState = DevicesUiState.DevicesFound(listOf(aNetworkDevice(aDevice())), setOf(aDevice().host))
+
+        assertEquals(true, uiState.hasStreamingButton())
+    }
+
+    @Test
+    fun `there is a stream button to stop while streaming`() {
+        assertEquals(true, DevicesUiState.Searching(isStreaming = true).hasStreamingButton())
+    }
+
+    @Test
+    fun `there is no stream button while nothing is selected and nothing streams`() {
+        val uiState = DevicesUiState.DevicesFound(listOf(aNetworkDevice(aDevice())), emptySet())
+
+        assertEquals(false, uiState.hasStreamingButton())
     }
 }

@@ -46,6 +46,8 @@ core/discovery/   Finding devices.
   mdns/           mDNS/Bonjour browsing with NsdManager (Chromecast, AirPlay, AriaCast, Fire TV, Spotify Connect,
                   Bose SoundTouch). The table of service types is in MdnsServices.kt.
   DeviceRepository / NetworkDeviceRepository   Merges all discoveries into one sorted list, one entry per device id.
+core/groups/      Saved device groups (SharedPreferences + JSON). A group is a name plus its devices (host, name, protocol).
+                  Clicking one on the Devices screen selects its devices that are on the network and starts streaming.
 core/streaming/   Sending audio.
   capture/        PlaybackAudioCapture: AudioRecord + MediaProjection -> 20 ms PCM frames.
   aac/            AacEncoder (MediaCodec), AdtsHeader, AacHttpStream (tiny HTTP server for /stream.aac).

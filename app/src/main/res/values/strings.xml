@@ -12,6 +12,20 @@
         <item quantity="one">Stream to %1$d device</item>
         <item quantity="other">Stream to %1$d devices</item>
     </plurals>
+    <string name="devices_save_group">Save as group</string>
+    <string name="devices_save_group_title">Save the selected devices as a group</string>
+    <string name="devices_group_name_label">Group name</string>
+    <string name="devices_save_group_confirm">Save</string>
+    <string name="devices_edit_group">Edit group</string>
+    <string name="devices_play_group">Stream to this group</string>
+    <string name="devices_edit_group_title">Edit group</string>
+    <string name="devices_delete_group">Delete group</string>
+    <string name="devices_delete_group_title">Delete %1$s?</string>
+    <string name="devices_delete_group_body">The group is removed from this phone. Your devices are not affected.</string>
+    <string name="devices_delete_group_confirm">Delete</string>
+    <string name="devices_group_not_on_network">None of its devices are on the network right now</string>
+    <string name="devices_groups_header">Groups</string>
+    <string name="devices_devices_header">Devices</string>
     <string name="devices_choose_protocol">Choose how to stream</string>
     <string name="devices_choose_protocol_title">Stream to %1$s with</string>
     <string name="devices_choose_protocol_cancel">Cancel</string>

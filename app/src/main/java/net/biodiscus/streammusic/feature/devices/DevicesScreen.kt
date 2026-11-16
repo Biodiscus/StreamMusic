@@ -7,28 +7,33 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -50,6 +55,10 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import net.biodiscus.streammusic.R
+import net.biodiscus.streammusic.core.model.DeviceGroup
+import net.biodiscus.streammusic.core.model.DeviceGroupColor
+import net.biodiscus.streammusic.core.model.DeviceGroupIcon
+import net.biodiscus.streammusic.core.model.DeviceGroupMember
 import net.biodiscus.streammusic.core.model.DeviceProtocol
 import net.biodiscus.streammusic.core.model.DeviceStreamStatus
 import net.biodiscus.streammusic.core.model.NetworkDevice
@@ -86,6 +95,13 @@ internal fun DevicesRoute(
         snackbarHostState = snackbarHostState,
         onDeviceClicked = viewModel::onDeviceClicked,
         onProtocolChosen = viewModel::onProtocolChosen,
+        onSaveGroupClicked = viewModel::onSaveGroupClicked,
+        onGroupEdited = viewModel::onGroupEdited,
+        onDeleteGroupClicked = viewModel::onDeleteGroupClicked,
+        onGroupClicked = { group, streamingDeviceIds ->
+            viewModel.onGroupClicked(group)
+            startStreaming(streamingDeviceIds)
+        },
         onRefreshClicked = viewModel::onRefreshClicked,
         onSettingsClicked = onSettingsClicked,
         onContinueClicked = startStreaming,
@@ -121,6 +137,10 @@ internal fun DevicesScreen(
     snackbarHostState: SnackbarHostState,
     onDeviceClicked: (NetworkDevice) -> Unit,
     onProtocolChosen: (NetworkDevice, DeviceProtocol) -> Unit,
+    onSaveGroupClicked: (String, DeviceGroupIcon, DeviceGroupColor) -> Unit,
+    onGroupEdited: (DeviceGroup, String, DeviceGroupIcon, List<DeviceGroupMember>) -> Unit,
+    onDeleteGroupClicked: (DeviceGroup) -> Unit,
+    onGroupClicked: (DeviceGroup, Set<String>) -> Unit,
     onRefreshClicked: () -> Unit,
     onSettingsClicked: () -> Unit,
     onContinueClicked: (Set<String>) -> Unit,
@@ -128,6 +148,9 @@ internal fun DevicesScreen(
     modifier: Modifier = Modifier,
 ) {
     var protocolChoiceDeviceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var isSaveGroupDialogShown by rememberSaveable { mutableStateOf(false) }
+    var editedGroupName by rememberSaveable { mutableStateOf<String?>(null) }
+    var groupNameToDelete by rememberSaveable { mutableStateOf<String?>(null) }
 
     Scaffold(
         modifier = modifier,
@@ -145,12 +168,65 @@ internal fun DevicesScreen(
                 },
             )
         },
-        floatingActionButton = { StreamingButton(uiState, onContinueClicked, onStopClicked) },
+        bottomBar = {
+            ActionButtons(
+                uiState = uiState,
+                onSaveGroupClicked = { isSaveGroupDialogShown = true },
+                onContinueClicked = onContinueClicked,
+                onStopClicked = onStopClicked,
+            )
+        },
     ) { contentPadding ->
         Column(Modifier.padding(contentPadding)) {
             if (uiState is DevicesUiState.DevicesFound) {
-                DeviceList(uiState, onDeviceClicked, onChooseProtocolClicked = { device -> protocolChoiceDeviceId = device.id })
+                DeviceList(
+                    uiState = uiState,
+                    onDeviceClicked = onDeviceClicked,
+                    onChooseProtocolClicked = { device -> protocolChoiceDeviceId = device.id },
+                    onGroupClicked = onGroupClicked,
+                    onEditGroupClicked = { group -> editedGroupName = group.name },
+                    onDeleteGroupClicked = { group -> groupNameToDelete = group.name },
+                )
             }
+        }
+    }
+
+    if (isSaveGroupDialogShown) {
+        SaveGroupDialog(
+            onSaveClicked = { name, icon, color ->
+                onSaveGroupClicked(name, icon, color)
+                isSaveGroupDialogShown = false
+            },
+            onDismiss = { isSaveGroupDialogShown = false },
+        )
+    }
+
+    if (uiState is DevicesUiState.DevicesFound) {
+        val groupToDelete = uiState.groups.firstOrNull { group -> group.name == groupNameToDelete }
+        if (groupToDelete != null) {
+            DeleteGroupDialog(
+                group = groupToDelete,
+                onConfirmed = {
+                    onDeleteGroupClicked(groupToDelete)
+                    groupNameToDelete = null
+                },
+                onDismiss = { groupNameToDelete = null },
+            )
+        }
+    }
+
+    if (uiState is DevicesUiState.DevicesFound) {
+        val groupToEdit = uiState.groups.firstOrNull { group -> group.name == editedGroupName }
+        if (groupToEdit != null) {
+            EditGroupDialog(
+                group = groupToEdit,
+                protocolChoicesFor = uiState::protocolChoicesFor,
+                onSaveClicked = { name, icon, members ->
+                    onGroupEdited(groupToEdit, name, icon, members)
+                    editedGroupName = null
+                },
+                onDismiss = { editedGroupName = null },
+            )
         }
     }
 
@@ -170,6 +246,33 @@ internal fun DevicesScreen(
     }
 }
 
+/** The save button is a smaller, secondary button next to the main stream button. */
+@Composable
+private fun ActionButtons(
+    uiState: DevicesUiState,
+    onSaveGroupClicked: () -> Unit,
+    onContinueClicked: (Set<String>) -> Unit,
+    onStopClicked: () -> Unit,
+) {
+    if (!uiState.hasStreamingButton()) return
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (uiState is DevicesUiState.DevicesFound && uiState.canSaveGroup) {
+            SmallFloatingActionButton(
+                onClick = onSaveGroupClicked,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ) {
+                Icon(Icons.Filled.CreateNewFolder, contentDescription = stringResource(R.string.devices_save_group))
+            }
+        }
+        StreamingButton(uiState, onContinueClicked, onStopClicked)
+    }
+}
+
 @Composable
 private fun StreamingButton(
     uiState: DevicesUiState,
@@ -177,12 +280,13 @@ private fun StreamingButton(
     onStopClicked: () -> Unit,
 ) {
     if (uiState.isStreaming) {
-        ExtendedFloatingActionButton(onClick = onStopClicked) {
-            Text(stringResource(R.string.devices_stop))
+        FloatingActionButton(onClick = onStopClicked) {
+            Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.devices_stop))
         }
     } else if (uiState is DevicesUiState.DevicesFound && uiState.selectedCount > 0) {
-        ExtendedFloatingActionButton(onClick = { onContinueClicked(uiState.selectedStreamingDeviceIds) }) {
-            Text(pluralStringResource(R.plurals.devices_continue, uiState.selectedCount, uiState.selectedCount))
+        FloatingActionButton(onClick = { onContinueClicked(uiState.selectedStreamingDeviceIds) }) {
+            val description = pluralStringResource(R.plurals.devices_continue, uiState.selectedCount, uiState.selectedCount)
+            Icon(Icons.Filled.PlayArrow, contentDescription = description)
         }
     }
 }
@@ -192,8 +296,25 @@ private fun DeviceList(
     uiState: DevicesUiState.DevicesFound,
     onDeviceClicked: (NetworkDevice) -> Unit,
     onChooseProtocolClicked: (NetworkDevice) -> Unit,
+    onGroupClicked: (DeviceGroup, Set<String>) -> Unit,
+    onEditGroupClicked: (DeviceGroup) -> Unit,
+    onDeleteGroupClicked: (DeviceGroup) -> Unit,
 ) {
-    LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+    LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
+        if (uiState.showsGroups) {
+            item(key = "groups-header") { SectionHeader(stringResource(R.string.devices_groups_header)) }
+            items(items = uiState.groups, key = { group -> "group-${group.name}" }) { group ->
+                val streamingDeviceIds = uiState.streamingOptionsOf(group).map { option -> option.id }.toSet()
+                DeviceGroupRow(
+                    group = group,
+                    isOnNetwork = streamingDeviceIds.isNotEmpty(),
+                    onPlayClicked = { onGroupClicked(group, streamingDeviceIds) },
+                    onEditClicked = { onEditGroupClicked(group) },
+                    onDeleteClicked = { onDeleteGroupClicked(group) },
+                )
+            }
+            item(key = "devices-header") { SectionHeader(stringResource(R.string.devices_devices_header)) }
+        }
         items(items = uiState.devices, key = { device -> device.id }) { device ->
             DeviceRow(
                 device = device,
@@ -205,6 +326,16 @@ private fun DeviceList(
             )
         }
     }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
 }
 
 @Composable
@@ -302,10 +433,15 @@ private fun DevicesScreenPreview() {
             snackbarHostState = remember { SnackbarHostState() },
             uiState = DevicesUiState.DevicesFound(
                 devices = previewDevices.groupIntoNetworkDevices(),
-                selectedDeviceIds = setOf("192.168.1.20"),
+                selectedDeviceIds = setOf("192.168.1.20", "192.168.1.30"),
+                groups = listOf(previewGroup),
             ),
             onDeviceClicked = {},
             onProtocolChosen = { _, _ -> },
+            onSaveGroupClicked = { _, _, _ -> },
+            onGroupEdited = { _, _, _, _ -> },
+            onDeleteGroupClicked = {},
+            onGroupClicked = { _, _ -> },
             onRefreshClicked = {},
             onSettingsClicked = {},
             onContinueClicked = {},
@@ -331,6 +467,10 @@ private fun DevicesScreenStreamingPreview() {
             ),
             onDeviceClicked = {},
             onProtocolChosen = { _, _ -> },
+            onSaveGroupClicked = { _, _, _ -> },
+            onGroupEdited = { _, _, _, _ -> },
+            onDeleteGroupClicked = {},
+            onGroupClicked = { _, _ -> },
             onRefreshClicked = {},
             onSettingsClicked = {},
             onContinueClicked = {},
@@ -338,6 +478,16 @@ private fun DevicesScreenStreamingPreview() {
         )
     }
 }
+
+private val previewGroup = DeviceGroup(
+    name = "Downstairs",
+    icon = DeviceGroupIcon.FOLDER,
+    color = DeviceGroupColor.TEAL,
+    members = listOf(
+        DeviceGroupMember("192.168.1.20", "Kitchen", DeviceProtocol.SONOS),
+        DeviceGroupMember("192.168.1.30", "Living room TV", DeviceProtocol.CHROMECAST),
+    ),
+)
 
 private val previewDevices = listOf(
     StreamingDevice("Kitchen", DeviceProtocol.SONOS, "192.168.1.20", 1400),
