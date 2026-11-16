@@ -21,11 +21,8 @@
     <string name="devices_permission_body">StreamMusic needs this permission to find speakers and TVs on your Wi-Fi.</string>
     <string name="devices_permission_button">Allow</string>
 
-    <string name="streaming_title">Now streaming</string>
-    <string name="streaming_stop">Stop streaming</string>
-    <string name="streaming_status_connecting">Connecting…</string>
-    <string name="streaming_status_streaming">Streaming</string>
-    <string name="streaming_status_failed">Failed: %1$s</string>
-    <string name="streaming_stopped">Streaming has stopped</string>
-    <string name="streaming_back_to_devices">Back to devices</string>
+    <string name="devices_stop">Stop streaming</string>
+    <string name="devices_status_connecting">Connecting…</string>
+    <string name="devices_status_playing">Playing</string>
+    <string name="devices_status_failed">Failed: %1$s</string>
 </resources>

@@ -23,9 +23,36 @@ class StreamingStateRepository @Inject constructor() {
         mutableState.value = StreamingState.Active(devices, allConnecting)
     }
 
-    fun deviceStatusChanged(deviceId: String, status: DeviceStreamStatus) {
+    fun deviceAdded(device: StreamingDevice) {
         mutableState.update { current ->
             if (current is StreamingState.Active) {
+                current.copy(
+                    devices = current.devices + device,
+                    statusByDeviceId = current.statusByDeviceId + (device.id to DeviceStreamStatus.Connecting),
+                )
+            } else {
+                current
+            }
+        }
+    }
+
+    fun deviceRemoved(deviceId: String) {
+        mutableState.update { current ->
+            if (current is StreamingState.Active) {
+                current.copy(
+                    devices = current.devices.filterNot { device -> device.id == deviceId },
+                    statusByDeviceId = current.statusByDeviceId - deviceId,
+                )
+            } else {
+                current
+            }
+        }
+    }
+
+    /** A device that is not part of the session (anymore) is ignored, so a late report cannot bring it back. */
+    fun deviceStatusChanged(deviceId: String, status: DeviceStreamStatus) {
+        mutableState.update { current ->
+            if (current is StreamingState.Active && deviceId in current.statusByDeviceId) {
                 current.copy(statusByDeviceId = current.statusByDeviceId + (deviceId to status))
             } else {
                 current

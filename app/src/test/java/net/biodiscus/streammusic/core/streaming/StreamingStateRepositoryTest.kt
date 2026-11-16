@@ -57,4 +57,46 @@ class StreamingStateRepositoryTest {
 
         assertEquals(StreamingState.Idle, repository.state.value)
     }
+
+    @Test
+    fun `an added device is part of the stream and connecting`() {
+        repository.streamingStarted(listOf(kitchen))
+
+        repository.deviceAdded(garage)
+
+        val active = repository.state.value as StreamingState.Active
+        assertEquals(listOf(kitchen, garage), active.devices)
+        assertEquals(DeviceStreamStatus.Connecting, active.statusByDeviceId[garage.id])
+    }
+
+    @Test
+    fun `adding a device while idle is ignored`() {
+        repository.deviceAdded(kitchen)
+
+        assertEquals(StreamingState.Idle, repository.state.value)
+    }
+
+    @Test
+    fun `a removed device is no longer part of the stream`() {
+        repository.streamingStarted(listOf(kitchen, garage))
+
+        repository.deviceRemoved(garage.id)
+
+        val expected = StreamingState.Active(
+            devices = listOf(kitchen),
+            statusByDeviceId = mapOf(kitchen.id to DeviceStreamStatus.Connecting),
+        )
+        assertEquals(expected, repository.state.value)
+    }
+
+    @Test
+    fun `a late status of a removed device does not bring it back`() {
+        repository.streamingStarted(listOf(kitchen, garage))
+        repository.deviceRemoved(garage.id)
+
+        repository.deviceStatusChanged(garage.id, DeviceStreamStatus.Streaming)
+
+        val active = repository.state.value as StreamingState.Active
+        assertEquals(null, active.statusByDeviceId[garage.id])
+    }
 }

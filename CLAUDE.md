@@ -29,9 +29,9 @@ The project's own files win over the skill where they differ:
 
 ### What the app does
 
-1. **Devices screen** searches the network and lists every device it finds. The user ticks one or more devices that can receive audio.
+1. **Devices screen** (the only screen) searches the network and lists every device it finds. The user ticks one or more devices that can receive audio.
 2. The user taps "Stream to N devices". The app asks for the microphone permission (the audio-capture API needs it) and then shows **Android's own screen-sharing dialog**. That dialog is the only place the user chooses what to share. The app cannot see which app was chosen, so it captures all audio the phone plays.
-3. A **foreground service** captures the audio and streams it to every chosen device. The **Now streaming screen** shows one status per device (connecting, streaming, failed) and a Stop button. A notification with a Stop action keeps it controllable from other apps.
+3. A **foreground service** captures the audio and streams it to every chosen device. The same Devices screen now shows one status per ticked device (connecting, playing, failed) and a Stop button. While streaming, ticking another device starts it in the running session and unticking stops it (unticking the last one stops the session). No new consent is needed, because the session keeps its screen-sharing grant. A notification with a Stop action keeps it controllable from other apps.
 
 ### Packages (`app/src/main/java/net/biodiscus/streammusic/`)
 
@@ -51,10 +51,11 @@ core/streaming/   Sending audio.
   aac/            AacEncoder (MediaCodec), AdtsHeader, AacHttpStream (tiny HTTP server for /stream.aac).
   device/         One DeviceStreamer per protocol family (upnp/, cast/, ariacast/) and the factory that picks one.
   StreamingSession          Runs one session: shares the audio, starts the streamers, tracks per-device status.
+                            Devices can be added and removed while it runs.
   StreamingStateRepository  What the screens observe about the (service-owned) session.
+  StreamingController       What screens ask of the running service: add a device, remove a device, stop.
   service/        StreamingService (foreground service), StreamingNotification, StreamingRequest (Intent packing).
-feature/devices/    Devices screen: route, screen, ViewModel, UiState, permission and stream-start flow.
-feature/streaming/  Now streaming screen: route, screen, ViewModel, UiState.
+feature/devices/    The one screen: route, screen, ViewModel, UiState, permission and stream-start flow.
 ui/                 Theme and preview annotations.
 ```
 
@@ -70,7 +71,7 @@ PlaybackAudioCapture -> 20 ms PCM frames (48 kHz, 16-bit, stereo, 3840 bytes)
                  ^ devices pull this URL; UpnpDeviceStreamer and ChromecastDeviceStreamer tell them to
 ```
 
-The AAC stream is only started when at least one chosen device pulls an HTTP stream.
+The AAC stream is only started when a device that pulls an HTTP stream joins the session (at the start or later), and all such devices share it.
 
 ### Protocols
 
@@ -88,6 +89,7 @@ A device that is reachable by two methods of the same protocol (for example AirP
 ### Contracts that matter
 
 - **`DeviceStreamer.stream(onStreaming): Nothing`** never returns. Cancelling the coroutine stops the device (cleanup runs in `finally` with `NonCancellable`). An exception means that device failed. `StreamingSession` catches it per device, so one failing device never stops the others.
+- **A running session changes through `addDevice` / `removeDevice`**, which queue the change. The session applies them one at a time, so its bookkeeping needs no locks. The Devices screen keeps its ticked devices equal to the session's devices while streaming.
 - **`StreamingSession.run()` switches to `Dispatchers.IO` itself.** The service calls it from the main thread, where every socket call throws `NetworkOnMainThreadException`. Any new code that touches the network must run under it or on `Dispatchers.IO`.
 - **Discovery flows run only while collected.** `DevicesViewModel` collects them while the Devices screen is visible. Blocking socket reads are unblocked by closing the socket in `awaitClose`, because cancellation does not interrupt them.
 - **Only IPv4 devices are listed.** Stream URLs and control URLs are built from the IPv4 address (`isIpv4Address`).

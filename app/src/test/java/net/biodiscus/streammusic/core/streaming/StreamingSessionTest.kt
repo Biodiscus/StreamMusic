@@ -37,6 +37,7 @@ class StreamingSessionTest {
     private val aacStarter = RecordingAacStreamStarter()
     private val streamers = FakeStreamerFactory()
     private val phoneVolume = FakePhoneMusicVolume(level = 7)
+    private lateinit var session: StreamingSession
 
     private val kitchen = aDevice(name = "Kitchen", protocol = DeviceProtocol.DLNA, host = "10.0.0.2")
     private val study = aDevice(name = "Study", protocol = DeviceProtocol.ARIACAST, host = "10.0.0.3")
@@ -155,12 +156,115 @@ class StreamingSessionTest {
         assertEquals(7, phoneVolume.level)
     }
 
+    @Test
+    fun `a device added while streaming starts streaming`() = runTest {
+        streamers.streamsSuccessfully(kitchen, study)
+        val job = startSession(kitchen)
+
+        session.addDevice(study)
+        runCurrent()
+
+        assertEquals(listOf(kitchen, study), devicesInState())
+        assertEquals(DeviceStreamStatus.Streaming, statusOf(study))
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `adding a device that is already streaming changes nothing`() = runTest {
+        streamers.streamsSuccessfully(kitchen)
+        val job = startSession(kitchen)
+
+        session.addDevice(kitchen)
+        runCurrent()
+
+        assertEquals(listOf(kitchen), devicesInState())
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `starts the AAC stream when the first device that needs it is added later`() = runTest {
+        streamers.streamsSuccessfully(study, kitchen)
+        val job = startSession(study)
+
+        session.addDevice(kitchen)
+        runCurrent()
+
+        assertEquals(1, aacStarter.startCount)
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `shares one AAC stream between devices that need it`() = runTest {
+        val bedroom = aDevice(name = "Bedroom", protocol = DeviceProtocol.DLNA, host = "10.0.0.4")
+        streamers.streamsSuccessfully(kitchen, bedroom)
+        val job = startSession(kitchen)
+
+        session.addDevice(bedroom)
+        runCurrent()
+
+        assertEquals(1, aacStarter.startCount)
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `a removed device is stopped and leaves the stream`() = runTest {
+        streamers.streamsSuccessfully(kitchen, study)
+        val job = startSession(kitchen, study)
+
+        session.removeDevice(study.id)
+        runCurrent()
+
+        assertTrue(streamers.hasStopped(study))
+        assertEquals(listOf(kitchen), devicesInState())
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `removing a device does not stop the other devices`() = runTest {
+        streamers.streamsSuccessfully(kitchen, study)
+        val job = startSession(kitchen, study)
+
+        session.removeDevice(study.id)
+        runCurrent()
+
+        assertFalse(streamers.hasStopped(kitchen))
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `a device that was removed can be added again`() = runTest {
+        streamers.streamsSuccessfully(kitchen, study)
+        val job = startSession(kitchen, study)
+        session.removeDevice(study.id)
+        runCurrent()
+
+        session.addDevice(study)
+        runCurrent()
+
+        assertEquals(listOf(kitchen, study), devicesInState())
+        assertEquals(DeviceStreamStatus.Streaming, statusOf(study))
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `a device that failed can be removed`() = runTest {
+        streamers.fails(kitchen, IOException("Connection refused"))
+        streamers.streamsSuccessfully(study)
+        val job = startSession(kitchen, study)
+
+        session.removeDevice(kitchen.id)
+        runCurrent()
+
+        assertEquals(listOf(study), devicesInState())
+        job.cancelAndJoin()
+    }
+
     private fun TestScope.startSession(
         vararg devices: StreamingDevice,
         dispatcher: CoroutineDispatcher = StandardTestDispatcher(testScheduler),
     ): Job {
         val capturedPcm: Flow<ByteArray> = flow { awaitCancellation() }
-        val session = StreamingSession(devices.toList(), capturedPcm, streamers, aacStarter, stateRepository, phoneVolume, dispatcher)
+        session = StreamingSession(devices.toList(), capturedPcm, streamers, aacStarter, stateRepository, phoneVolume, dispatcher)
         val job = launch { session.run() }
         runCurrent()
         return job
@@ -168,10 +272,14 @@ class StreamingSessionTest {
 
     private fun statusOf(device: StreamingDevice): DeviceStreamStatus? =
         (stateRepository.state.value as StreamingState.Active).statusByDeviceId[device.id]
+
+    private fun devicesInState(): List<StreamingDevice> =
+        (stateRepository.state.value as StreamingState.Active).devices
 }
 
 private class FakeStreamerFactory : DeviceStreamerFactory {
     private val behaviorByDeviceId = mutableMapOf<String, suspend (() -> Unit) -> Nothing>()
+    private val stoppedDeviceIds = mutableListOf<String>()
     private val dispatcherByDeviceId = mutableMapOf<String, ContinuationInterceptor?>()
 
     fun streamsSuccessfully(vararg devices: StreamingDevice) {
@@ -191,6 +299,8 @@ private class FakeStreamerFactory : DeviceStreamerFactory {
         }
     }
 
+    fun hasStopped(device: StreamingDevice): Boolean = device.id in stoppedDeviceIds
+
     fun dispatcherOf(device: StreamingDevice): ContinuationInterceptor? = dispatcherByDeviceId[device.id]
 
     fun neverFinishesConnecting(vararg devices: StreamingDevice) {
@@ -204,7 +314,12 @@ private class FakeStreamerFactory : DeviceStreamerFactory {
     override fun create(device: StreamingDevice, audio: SessionAudio): DeviceStreamer {
         val behavior = behaviorByDeviceId.getValue(device.id)
         return object : DeviceStreamer {
-            override suspend fun stream(onStreaming: () -> Unit): Nothing = behavior(onStreaming)
+            override suspend fun stream(onStreaming: () -> Unit): Nothing =
+                try {
+                    behavior(onStreaming)
+                } finally {
+                    stoppedDeviceIds += device.id
+                }
         }
     }
 }

@@ -7,8 +7,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 internal data object DevicesDestination
 
-internal fun NavGraphBuilder.devicesScreen(onStreamingStarted: () -> Unit) {
+internal fun NavGraphBuilder.devicesScreen() {
     composable<DevicesDestination> {
-        DevicesRoute(onStreamingStarted = onStreamingStarted)
+        DevicesRoute()
     }
 }

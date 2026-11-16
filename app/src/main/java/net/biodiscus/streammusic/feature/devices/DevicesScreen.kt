@@ -9,14 +9,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -48,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import net.biodiscus.streammusic.R
 import net.biodiscus.streammusic.core.model.DeviceProtocol
+import net.biodiscus.streammusic.core.model.DeviceStreamStatus
 import net.biodiscus.streammusic.core.model.NetworkDevice
 import net.biodiscus.streammusic.core.model.StreamingDevice
 import net.biodiscus.streammusic.core.model.groupIntoNetworkDevices
@@ -56,7 +61,6 @@ import net.biodiscus.streammusic.ui.theme.StreamMusicTheme
 
 @Composable
 internal fun DevicesRoute(
-    onStreamingStarted: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DevicesViewModel = hiltViewModel(),
 ) {
@@ -75,7 +79,6 @@ internal fun DevicesRoute(
         onRecordAudioDenied = {
             coroutineScope.launch { snackbarHostState.showSnackbar(recordAudioDeniedMessage) }
         },
-        onStreamingStarted = onStreamingStarted,
     )
 
     DevicesScreen(
@@ -85,6 +88,7 @@ internal fun DevicesRoute(
         onProtocolChosen = viewModel::onProtocolChosen,
         onRefreshClicked = viewModel::onRefreshClicked,
         onContinueClicked = startStreaming,
+        onStopClicked = viewModel::onStopClicked,
         modifier = modifier,
     )
 }
@@ -118,6 +122,7 @@ internal fun DevicesScreen(
     onProtocolChosen: (NetworkDevice, DeviceProtocol) -> Unit,
     onRefreshClicked: () -> Unit,
     onContinueClicked: (Set<String>) -> Unit,
+    onStopClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var protocolChoiceDeviceId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -135,13 +140,7 @@ internal fun DevicesScreen(
                 },
             )
         },
-        floatingActionButton = {
-            if (uiState is DevicesUiState.DevicesFound && uiState.selectedCount > 0) {
-                ExtendedFloatingActionButton(onClick = { onContinueClicked(uiState.selectedStreamingDeviceIds) }) {
-                    Text(pluralStringResource(R.plurals.devices_continue, uiState.selectedCount, uiState.selectedCount))
-                }
-            }
-        },
+        floatingActionButton = { StreamingButton(uiState, onContinueClicked, onStopClicked) },
     ) { contentPadding ->
         Column(Modifier.padding(contentPadding)) {
             SearchingIndicator()
@@ -168,6 +167,23 @@ internal fun DevicesScreen(
 }
 
 @Composable
+private fun StreamingButton(
+    uiState: DevicesUiState,
+    onContinueClicked: (Set<String>) -> Unit,
+    onStopClicked: () -> Unit,
+) {
+    if (uiState.isStreaming) {
+        ExtendedFloatingActionButton(onClick = onStopClicked) {
+            Text(stringResource(R.string.devices_stop))
+        }
+    } else if (uiState is DevicesUiState.DevicesFound && uiState.selectedCount > 0) {
+        ExtendedFloatingActionButton(onClick = { onContinueClicked(uiState.selectedStreamingDeviceIds) }) {
+            Text(pluralStringResource(R.plurals.devices_continue, uiState.selectedCount, uiState.selectedCount))
+        }
+    }
+}
+
+@Composable
 private fun SearchingIndicator() {
     LinearProgressIndicator(Modifier.fillMaxWidth())
     Text(
@@ -189,6 +205,7 @@ private fun DeviceList(
                 device = device,
                 isSelected = device.id in uiState.selectedDeviceIds,
                 protocolInUse = uiState.streamingOptionOf(device)?.protocol,
+                streamStatus = uiState.streamStatusByDeviceId[device.id],
                 onClick = { onDeviceClicked(device) },
                 onChooseProtocolClicked = { onChooseProtocolClicked(device) },
             )
@@ -201,6 +218,7 @@ internal fun DeviceRow(
     device: NetworkDevice,
     isSelected: Boolean,
     protocolInUse: DeviceProtocol?,
+    streamStatus: DeviceStreamStatus?,
     onClick: () -> Unit,
     onChooseProtocolClicked: () -> Unit,
     modifier: Modifier = Modifier,
@@ -209,10 +227,11 @@ internal fun DeviceRow(
     ListItem(
         modifier = rowModifier,
         headlineContent = { Text(device.name) },
-        supportingContent = { Text(deviceDescription(device, protocolInUse)) },
+        supportingContent = { Text(deviceDescription(device, protocolInUse, streamStatus)) },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (device.streamingOptions.size > 1) {
+                if (streamStatus != null) StreamStatusIcon(streamStatus)
+                if (canChooseProtocol(device, streamStatus)) {
                     IconButton(onClick = onChooseProtocolClicked) {
                         Icon(Icons.Filled.Tune, contentDescription = stringResource(R.string.devices_choose_protocol))
                     }
@@ -224,10 +243,34 @@ internal fun DeviceRow(
 }
 
 @Composable
-private fun deviceDescription(device: NetworkDevice, protocolInUse: DeviceProtocol?): String {
+private fun deviceDescription(
+    device: NetworkDevice,
+    protocolInUse: DeviceProtocol?,
+    streamStatus: DeviceStreamStatus?,
+): String {
+    if (protocolInUse != null && streamStatus != null) {
+        return "${protocolInUse.displayName} · ${device.host}\n${streamStatusText(streamStatus)}"
+    }
     if (protocolInUse != null) return "${protocolInUse.displayName} · ${device.host}"
     val protocolNames = device.protocols.joinToString(" · ") { protocol -> protocol.displayName }
     return "$protocolNames · ${device.host}\n${stringResource(R.string.devices_discovery_only)}"
+}
+
+@Composable
+private fun streamStatusText(status: DeviceStreamStatus): String =
+    when (status) {
+        DeviceStreamStatus.Connecting -> stringResource(R.string.devices_status_connecting)
+        DeviceStreamStatus.Streaming -> stringResource(R.string.devices_status_playing)
+        is DeviceStreamStatus.Failed -> stringResource(R.string.devices_status_failed, status.reason)
+    }
+
+@Composable
+private fun StreamStatusIcon(status: DeviceStreamStatus) {
+    when (status) {
+        DeviceStreamStatus.Connecting -> CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+        DeviceStreamStatus.Streaming -> Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+        is DeviceStreamStatus.Failed -> Icon(Icons.Filled.ErrorOutline, null, tint = MaterialTheme.colorScheme.error)
+    }
 }
 
 @Composable
@@ -271,6 +314,31 @@ private fun DevicesScreenPreview() {
             onProtocolChosen = { _, _ -> },
             onRefreshClicked = {},
             onContinueClicked = {},
+            onStopClicked = {},
+        )
+    }
+}
+
+@ThemePreviews
+@Composable
+private fun DevicesScreenStreamingPreview() {
+    StreamMusicTheme {
+        DevicesScreen(
+            snackbarHostState = remember { SnackbarHostState() },
+            uiState = DevicesUiState.DevicesFound(
+                devices = previewDevices.groupIntoNetworkDevices(),
+                selectedDeviceIds = setOf("192.168.1.20", "192.168.1.30"),
+                streamStatusByDeviceId = mapOf(
+                    "192.168.1.20" to DeviceStreamStatus.Streaming,
+                    "192.168.1.30" to DeviceStreamStatus.Failed("Connection refused"),
+                ),
+                isStreaming = true,
+            ),
+            onDeviceClicked = {},
+            onProtocolChosen = { _, _ -> },
+            onRefreshClicked = {},
+            onContinueClicked = {},
+            onStopClicked = {},
         )
     }
 }

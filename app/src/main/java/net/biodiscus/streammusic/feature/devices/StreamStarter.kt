@@ -25,7 +25,6 @@ import net.biodiscus.streammusic.core.streaming.service.StreamingServiceCommands
 @Composable
 internal fun rememberStreamStarter(
     onRecordAudioDenied: () -> Unit,
-    onStreamingStarted: () -> Unit,
 ): (Set<String>) -> Unit {
     val context = LocalContext.current
     var chosenDeviceIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -34,7 +33,6 @@ internal fun rememberStreamStarter(
         val projectionData = result.data
         if (result.resultCode == Activity.RESULT_OK && projectionData != null) {
             StreamingServiceCommands.start(context, chosenDeviceIds, result.resultCode, projectionData)
-            onStreamingStarted()
         }
     }
 

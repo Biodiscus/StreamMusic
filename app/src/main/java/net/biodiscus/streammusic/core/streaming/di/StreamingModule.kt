@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 import net.biodiscus.streammusic.core.streaming.AudioManagerPhoneMusicVolume
 import net.biodiscus.streammusic.core.streaming.PhoneMusicVolume
+import net.biodiscus.streammusic.core.streaming.StreamingController
 import net.biodiscus.streammusic.core.streaming.aac.AacHttpStreamStarter
 import net.biodiscus.streammusic.core.streaming.aac.AacStreamStarter
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamerFactory
@@ -19,6 +20,7 @@ import net.biodiscus.streammusic.core.streaming.device.cast.CastChannelOpener
 import net.biodiscus.streammusic.core.streaming.device.cast.TlsCastChannelOpener
 import net.biodiscus.streammusic.core.streaming.device.upnp.AvTransportClient
 import net.biodiscus.streammusic.core.streaming.device.upnp.SoapAvTransportClient
+import net.biodiscus.streammusic.core.streaming.service.ServiceStreamingController
 import okhttp3.OkHttpClient
 
 private const val WEB_SOCKET_PING_SECONDS = 10L
@@ -38,6 +40,9 @@ internal abstract class StreamingModule {
 
     @Binds
     abstract fun bindDeviceStreamerFactory(factory: ProtocolDeviceStreamerFactory): DeviceStreamerFactory
+
+    @Binds
+    abstract fun bindStreamingController(controller: ServiceStreamingController): StreamingController
 
     @Binds
     abstract fun bindPhoneMusicVolume(volume: AudioManagerPhoneMusicVolume): PhoneMusicVolume

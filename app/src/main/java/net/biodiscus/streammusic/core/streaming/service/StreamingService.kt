@@ -21,6 +21,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import net.biodiscus.streammusic.core.discovery.DeviceRepository
 import net.biodiscus.streammusic.core.model.StreamingDevice
+import net.biodiscus.streammusic.core.streaming.StreamingSession
 import net.biodiscus.streammusic.core.streaming.StreamingSessionFactory
 import net.biodiscus.streammusic.core.streaming.capture.PlaybackAudioCapture
 
@@ -39,11 +40,16 @@ class StreamingService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var streamingJob: Job? = null
+    private var runningSession: StreamingSession? = null
     private var mediaProjection: MediaProjection? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (StreamingServiceCommands.isStart(intent)) startStreaming(checkNotNull(intent))
-        if (StreamingServiceCommands.isStop(intent)) stopStreaming()
+        when {
+            StreamingServiceCommands.isStart(intent) -> startStreaming(checkNotNull(intent))
+            StreamingServiceCommands.isStop(intent) -> stopStreaming()
+            StreamingServiceCommands.isAddDevice(intent) -> addDeviceToSession(checkNotNull(intent))
+            StreamingServiceCommands.isRemoveDevice(intent) -> removeDeviceFromSession(checkNotNull(intent))
+        }
         return START_NOT_STICKY
     }
 
@@ -64,7 +70,7 @@ class StreamingService : Service() {
             return
         }
 
-        val devices = findDevicesThatCanStream(request)
+        val devices = findDevicesThatCanStream(request.deviceIds)
         val projection = createMediaProjection(request)
         if (devices.isEmpty() || projection == null) {
             releaseEverythingAndStop()
@@ -74,7 +80,28 @@ class StreamingService : Service() {
         streamingJob?.cancel()
         val capture = PlaybackAudioCapture(projection)
         val session = sessionFactory.create(devices, capture.frames())
+        runningSession = session
         streamingJob = serviceScope.launch { runSession { session.run() } }
+    }
+
+    private fun addDeviceToSession(intent: Intent) {
+        val session = runningSessionOrStopService() ?: return
+        val deviceId = StreamingServiceCommands.readDeviceId(intent) ?: return
+        val device = findDevicesThatCanStream(setOf(deviceId)).firstOrNull() ?: return
+        session.addDevice(device)
+    }
+
+    private fun removeDeviceFromSession(intent: Intent) {
+        val session = runningSessionOrStopService() ?: return
+        val deviceId = StreamingServiceCommands.readDeviceId(intent) ?: return
+        session.removeDevice(deviceId)
+    }
+
+    /** A device command that arrives without a session would otherwise leave an idle service behind. */
+    private fun runningSessionOrStopService(): StreamingSession? {
+        val session = runningSession
+        if (session == null) stopSelf()
+        return session
     }
 
     /** A foreground service of type mediaProjection must be in the foreground before it uses the projection. */
@@ -83,8 +110,8 @@ class StreamingService : Service() {
         startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
     }
 
-    private fun findDevicesThatCanStream(request: StreamingRequest): List<StreamingDevice> =
-        deviceRepository.findDevices(request.deviceIds).filter { device -> device.canReceiveStream }
+    private fun findDevicesThatCanStream(deviceIds: Set<String>): List<StreamingDevice> =
+        deviceRepository.findDevices(deviceIds).filter { device -> device.canReceiveStream }
 
     private fun createMediaProjection(request: StreamingRequest): MediaProjection? {
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -116,6 +143,7 @@ class StreamingService : Service() {
     }
 
     private fun releaseEverythingAndStop() {
+        runningSession = null
         mediaProjection?.stop()
         mediaProjection = null
         stopForeground(STOP_FOREGROUND_REMOVE)
