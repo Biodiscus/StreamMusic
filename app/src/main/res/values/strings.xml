@@ -5,7 +5,7 @@
     <string name="streaming_notification_title">Streaming audio</string>
     <string name="streaming_notification_stop">Stop</string>
 
-    <string name="devices_title">Devices on your network</string>
+    <string name="devices_settings">Settings</string>
     <string name="devices_search_again">Search again</string>
     <string name="devices_searching">Searching your network…</string>
     <string name="devices_discovery_only">Found, but streaming to it is not supported yet</string>
@@ -20,6 +20,9 @@
     <string name="devices_permission_title">Allow access to devices on your network</string>
     <string name="devices_permission_body">StreamMusic needs this permission to find speakers and TVs on your Wi-Fi.</string>
     <string name="devices_permission_button">Allow</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_back">Back</string>
 
     <string name="devices_stop">Stop streaming</string>
     <string name="devices_status_connecting">Connecting…</string>

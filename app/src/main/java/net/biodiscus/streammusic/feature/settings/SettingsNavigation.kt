@@ -1,0 +1,14 @@
+package net.biodiscus.streammusic.feature.settings
+
+import androidx.navigation.NavGraphBuilder
+import androidx.navigation.compose.composable
+import kotlinx.serialization.Serializable
+
+@Serializable
+internal data object SettingsDestination
+
+internal fun NavGraphBuilder.settingsScreen(onBackClicked: () -> Unit) {
+    composable<SettingsDestination> {
+        SettingsScreen(onBackClicked = onBackClicked)
+    }
+}

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
@@ -61,6 +62,7 @@ import net.biodiscus.streammusic.ui.theme.StreamMusicTheme
 
 @Composable
 internal fun DevicesRoute(
+    onSettingsClicked: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DevicesViewModel = hiltViewModel(),
 ) {
@@ -87,6 +89,7 @@ internal fun DevicesRoute(
         onDeviceClicked = viewModel::onDeviceClicked,
         onProtocolChosen = viewModel::onProtocolChosen,
         onRefreshClicked = viewModel::onRefreshClicked,
+        onSettingsClicked = onSettingsClicked,
         onContinueClicked = startStreaming,
         onStopClicked = viewModel::onStopClicked,
         modifier = modifier,
@@ -121,6 +124,7 @@ internal fun DevicesScreen(
     onDeviceClicked: (NetworkDevice) -> Unit,
     onProtocolChosen: (NetworkDevice, DeviceProtocol) -> Unit,
     onRefreshClicked: () -> Unit,
+    onSettingsClicked: () -> Unit,
     onContinueClicked: (Set<String>) -> Unit,
     onStopClicked: () -> Unit,
     modifier: Modifier = Modifier,
@@ -132,10 +136,13 @@ internal fun DevicesScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.devices_title)) },
+                title = { Text(stringResource(R.string.app_name)) },
                 actions = {
                     IconButton(onClick = onRefreshClicked) {
                         Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.devices_search_again))
+                    }
+                    IconButton(onClick = onSettingsClicked) {
+                        Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.devices_settings))
                     }
                 },
             )
@@ -313,6 +320,7 @@ private fun DevicesScreenPreview() {
             onDeviceClicked = {},
             onProtocolChosen = { _, _ -> },
             onRefreshClicked = {},
+            onSettingsClicked = {},
             onContinueClicked = {},
             onStopClicked = {},
         )
@@ -337,6 +345,7 @@ private fun DevicesScreenStreamingPreview() {
             onDeviceClicked = {},
             onProtocolChosen = { _, _ -> },
             onRefreshClicked = {},
+            onSettingsClicked = {},
             onContinueClicked = {},
             onStopClicked = {},
         )
