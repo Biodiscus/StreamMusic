@@ -14,7 +14,9 @@ class NetworkDeviceTest {
     private val chromecast = aDevice(name = "Living room TV", protocol = DeviceProtocol.CHROMECAST, host = host)
     private val dlna = aDevice(name = "Samsung TV", protocol = DeviceProtocol.DLNA, host = host)
     private val sonos = aDevice(name = "Kitchen", protocol = DeviceProtocol.SONOS, host = host)
-    private val airPlay = aDevice(name = "Apple TV", protocol = DeviceProtocol.AIRPLAY, host = host)
+    private val fireTv = aDevice(name = "Fire TV", protocol = DeviceProtocol.FIRE_TV, host = host)
+    private val airPlay = aDevice(name = "Denon receiver", protocol = DeviceProtocol.AIRPLAY, host = host)
+    private val airPlay2 = aDevice(name = "Denon receiver", protocol = DeviceProtocol.AIRPLAY_2, host = host)
 
     @Test
     fun `streams with Chromecast when the device also speaks DLNA`() {
@@ -31,6 +33,41 @@ class NetworkDeviceTest {
     }
 
     @Test
+    fun `prefers DLNA over AirPlay`() {
+        val device = aNetworkDevice(airPlay, dlna)
+
+        assertEquals(dlna, device.bestStreamingOption)
+    }
+
+    @Test
+    fun `prefers AirPlay 2 over AirPlay`() {
+        val device = aNetworkDevice(airPlay, airPlay2)
+
+        assertEquals(airPlay2, device.bestStreamingOption)
+    }
+
+    @Test
+    fun `prefers DLNA over AirPlay 2`() {
+        val device = aNetworkDevice(airPlay2, dlna)
+
+        assertEquals(dlna, device.bestStreamingOption)
+    }
+
+    @Test
+    fun `lets the user choose AirPlay when it also speaks AirPlay 2`() {
+        val device = aNetworkDevice(airPlay, airPlay2)
+
+        assertEquals(airPlay, device.streamingOptionFor(DeviceProtocol.AIRPLAY))
+    }
+
+    @Test
+    fun `streams with AirPlay when nothing else can stream`() {
+        val device = aNetworkDevice(fireTv, airPlay)
+
+        assertEquals(airPlay, device.bestStreamingOption)
+    }
+
+    @Test
     fun `is named after the option it streams with`() {
         val device = aNetworkDevice(dlna, chromecast)
 
@@ -39,7 +76,7 @@ class NetworkDeviceTest {
 
     @Test
     fun `shows every protocol it can stream with, best first`() {
-        val device = aNetworkDevice(dlna, airPlay, chromecast)
+        val device = aNetworkDevice(dlna, fireTv, chromecast)
 
         assertEquals(listOf(DeviceProtocol.CHROMECAST, DeviceProtocol.DLNA), device.protocols)
     }
@@ -67,12 +104,12 @@ class NetworkDeviceTest {
 
     @Test
     fun `can stream when at least one protocol is supported`() {
-        assertTrue(aNetworkDevice(airPlay, dlna).canReceiveStream)
+        assertTrue(aNetworkDevice(fireTv, dlna).canReceiveStream)
     }
 
     @Test
     fun `cannot stream when no protocol is supported`() {
-        val device = aNetworkDevice(airPlay)
+        val device = aNetworkDevice(fireTv)
 
         assertFalse(device.canReceiveStream)
         assertNull(device.bestStreamingOption)
@@ -80,7 +117,7 @@ class NetworkDeviceTest {
 
     @Test
     fun `shows the unsupported protocols when none can stream`() {
-        assertEquals(listOf(DeviceProtocol.AIRPLAY), aNetworkDevice(airPlay).protocols)
+        assertEquals(listOf(DeviceProtocol.FIRE_TV), aNetworkDevice(fireTv).protocols)
     }
 
     @Test

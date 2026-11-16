@@ -22,8 +22,15 @@ enum class DeviceProtocol(
     DLNA("DLNA / UPnP", StreamTransport.DEVICE_PULLS_HTTP_STREAM),
     CHROMECAST("Chromecast", StreamTransport.DEVICE_PULLS_HTTP_STREAM),
     ARIACAST("AriaCast", StreamTransport.PHONE_PUSHES_PCM),
-    AIRPLAY("AirPlay", StreamTransport.NOT_SUPPORTED),
+    AIRPLAY("AirPlay", StreamTransport.PHONE_PUSHES_PCM),
+    AIRPLAY_2("AirPlay 2", StreamTransport.PHONE_PUSHES_PCM),
     FIRE_TV("Fire TV", StreamTransport.NOT_SUPPORTED),
     SPOTIFY_CONNECT("Spotify Connect", StreamTransport.NOT_SUPPORTED),
     BOSE_SOUNDTOUCH("Bose SoundTouch", StreamTransport.NOT_SUPPORTED),
+    ;
+
+    /** True when the app can stream to devices of this protocol. The others are only listed. */
+    val isImplemented: Boolean = transport != StreamTransport.NOT_SUPPORTED
+
+    val isAirPlay: Boolean get() = this == AIRPLAY || this == AIRPLAY_2
 }

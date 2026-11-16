@@ -3,6 +3,9 @@ package net.biodiscus.streammusic.core.streaming.device
 import javax.inject.Inject
 import net.biodiscus.streammusic.core.model.DeviceProtocol
 import net.biodiscus.streammusic.core.model.StreamingDevice
+import net.biodiscus.streammusic.core.streaming.device.airplay.RaopConnector
+import net.biodiscus.streammusic.core.streaming.device.airplay.RaopDeviceStreamer
+import net.biodiscus.streammusic.core.streaming.device.airplay2.AirPlay2DeviceStreamer
 import net.biodiscus.streammusic.core.streaming.device.ariacast.AriaCastConnector
 import net.biodiscus.streammusic.core.streaming.device.ariacast.AriaCastDeviceStreamer
 import net.biodiscus.streammusic.core.streaming.device.cast.CastChannelOpener
@@ -14,6 +17,7 @@ internal class ProtocolDeviceStreamerFactory @Inject constructor(
     private val avTransportClient: AvTransportClient,
     private val castChannelOpener: CastChannelOpener,
     private val ariaCastConnector: AriaCastConnector,
+    private val raopConnector: RaopConnector,
 ) : DeviceStreamerFactory {
 
     override fun create(device: StreamingDevice, audio: SessionAudio): DeviceStreamer =
@@ -26,8 +30,9 @@ internal class ProtocolDeviceStreamerFactory @Inject constructor(
 
             DeviceProtocol.CHROMECAST -> ChromecastDeviceStreamer(device, audio, castChannelOpener)
             DeviceProtocol.ARIACAST -> AriaCastDeviceStreamer(device, audio, ariaCastConnector)
+            DeviceProtocol.AIRPLAY -> RaopDeviceStreamer(device, audio, raopConnector)
+            DeviceProtocol.AIRPLAY_2 -> AirPlay2DeviceStreamer(device, audio, raopConnector)
 
-            DeviceProtocol.AIRPLAY,
             DeviceProtocol.FIRE_TV,
             DeviceProtocol.SPOTIFY_CONNECT,
             DeviceProtocol.BOSE_SOUNDTOUCH,

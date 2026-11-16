@@ -39,7 +39,7 @@ class DevicesViewModelTest {
 
     private val kitchen = aDevice(name = "Kitchen", protocol = DeviceProtocol.SONOS, host = "10.0.0.2")
     private val study = aDevice(name = "Study", protocol = DeviceProtocol.DLNA, host = "10.0.0.4")
-    private val homePod = aDevice(name = "HomePod", protocol = DeviceProtocol.AIRPLAY, host = "10.0.0.3")
+    private val fireTv = aDevice(name = "Fire TV", protocol = DeviceProtocol.FIRE_TV, host = "10.0.0.3")
 
     private fun createViewModelWithCurrentStreamingState() =
         DevicesViewModel(repository, streamingState, streamingController, groupRepository)
@@ -56,9 +56,9 @@ class DevicesViewModelTest {
         viewModel.uiState.test {
             awaitItem()
 
-            repository.setFoundDevices(kitchen, homePod)
+            repository.setFoundDevices(kitchen, fireTv)
 
-            assertEquals(DevicesUiState.DevicesFound(listOf(aNetworkDevice(homePod), aNetworkDevice(kitchen)), emptySet()), awaitItem())
+            assertEquals(DevicesUiState.DevicesFound(listOf(aNetworkDevice(fireTv), aNetworkDevice(kitchen)), emptySet()), awaitItem())
         }
     }
 
@@ -102,11 +102,11 @@ class DevicesViewModelTest {
 
     @Test
     fun `clicking a device that cannot receive a stream does not select it`() = runTest {
-        repository.setFoundDevices(homePod)
+        repository.setFoundDevices(fireTv)
         viewModel.uiState.test {
             awaitItem()
 
-            viewModel.onDeviceClicked(aNetworkDevice(homePod))
+            viewModel.onDeviceClicked(aNetworkDevice(fireTv))
 
             val uiState = viewModel.uiState.value as DevicesUiState.DevicesFound
             assertEquals(emptySet<String>(), uiState.selectedDeviceIds)

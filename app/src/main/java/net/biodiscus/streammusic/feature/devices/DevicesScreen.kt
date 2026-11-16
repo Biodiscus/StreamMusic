@@ -493,5 +493,5 @@ private val previewDevices = listOf(
     StreamingDevice("Kitchen", DeviceProtocol.SONOS, "192.168.1.20", 1400),
     StreamingDevice("Kitchen", DeviceProtocol.DLNA, "192.168.1.20", 1400),
     StreamingDevice("Living room TV", DeviceProtocol.CHROMECAST, "192.168.1.30", 8009),
-    StreamingDevice("HomePod", DeviceProtocol.AIRPLAY, "192.168.1.40", 7000),
+    StreamingDevice("Fire TV Stick", DeviceProtocol.FIRE_TV, "192.168.1.40", 8009),
 )

@@ -11,8 +11,9 @@ data class StreamingDevice(
     val host: String,
     val port: Int,
     val avTransportControlUrl: String? = null,
+    val raop: RaopServiceInfo? = null,
 ) {
     val id: String = "${protocol.name}@$host"
 
-    val canReceiveStream: Boolean = protocol.transport != StreamTransport.NOT_SUPPORTED
+    val canReceiveStream: Boolean = protocol.isImplemented && (raop?.canReceiveAudioWith(protocol) ?: true)
 }

@@ -7,8 +7,11 @@ import kotlinx.serialization.Serializable
 @Serializable
 internal data object SettingsDestination
 
-internal fun NavGraphBuilder.settingsScreen(onBackClicked: () -> Unit) {
+internal fun NavGraphBuilder.settingsScreen(
+    onBackClicked: () -> Unit,
+    onDiscoveryDebugClicked: () -> Unit,
+) {
     composable<SettingsDestination> {
-        SettingsScreen(onBackClicked = onBackClicked)
+        SettingsScreen(onBackClicked = onBackClicked, onDiscoveryDebugClicked = onDiscoveryDebugClicked)
     }
 }

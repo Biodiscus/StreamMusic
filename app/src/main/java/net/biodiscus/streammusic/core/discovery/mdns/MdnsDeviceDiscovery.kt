@@ -65,8 +65,7 @@ internal class MdnsDeviceDiscovery @Inject constructor(
     ) {
         for (service in foundServices) {
             val resolved = resolveWithTimeout(nsdManager, service.info) ?: continue
-            val device = toStreamingDevice(resolved, service.protocol)
-            if (device != null) devices.send(device)
+            toStreamingDevices(resolved, service.protocol).forEach { device -> devices.send(device) }
         }
     }
 
@@ -83,15 +82,18 @@ internal class MdnsDeviceDiscovery @Inject constructor(
         }
     }
 
-    private fun toStreamingDevice(resolved: NsdServiceInfo, protocol: DeviceProtocol): StreamingDevice? {
-        val address = resolved.host as? Inet4Address ?: return null
+    private fun toStreamingDevices(resolved: NsdServiceInfo, foundProtocol: DeviceProtocol): List<StreamingDevice> {
+        val address = resolved.host as? Inet4Address ?: return emptyList()
         val textRecords = resolved.attributes.mapValues { (_, bytes) -> String(bytes ?: ByteArray(0)) }
-        return StreamingDevice(
-            name = friendlyMdnsName(protocol, resolved.serviceName, textRecords),
-            protocol = protocol,
-            host = address.hostAddress.orEmpty(),
-            port = resolved.port,
-        )
+        return protocolsAnnouncedBy(foundProtocol, textRecords).map { protocol ->
+            StreamingDevice(
+                name = friendlyMdnsName(protocol, resolved.serviceName, textRecords),
+                protocol = protocol,
+                host = address.hostAddress.orEmpty(),
+                port = resolved.port,
+                raop = if (protocol.isAirPlay) parseRaopServiceInfo(textRecords) else null,
+            )
+        }
     }
 }
 

@@ -14,6 +14,8 @@ import net.biodiscus.streammusic.core.streaming.aac.AacHttpStreamStarter
 import net.biodiscus.streammusic.core.streaming.aac.AacStreamStarter
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamerFactory
 import net.biodiscus.streammusic.core.streaming.device.ProtocolDeviceStreamerFactory
+import net.biodiscus.streammusic.core.streaming.device.airplay.RaopConnector
+import net.biodiscus.streammusic.core.streaming.device.airplay.SocketRaopConnector
 import net.biodiscus.streammusic.core.streaming.device.ariacast.AriaCastConnector
 import net.biodiscus.streammusic.core.streaming.device.ariacast.WebSocketAriaCastConnector
 import net.biodiscus.streammusic.core.streaming.device.cast.CastChannelOpener
@@ -37,6 +39,9 @@ internal abstract class StreamingModule {
 
     @Binds
     abstract fun bindAriaCastConnector(connector: WebSocketAriaCastConnector): AriaCastConnector
+
+    @Binds
+    abstract fun bindRaopConnector(connector: SocketRaopConnector): RaopConnector
 
     @Binds
     abstract fun bindDeviceStreamerFactory(factory: ProtocolDeviceStreamerFactory): DeviceStreamerFactory

@@ -7,6 +7,8 @@ private val STREAMING_PREFERENCE = listOf(
     DeviceProtocol.CHROMECAST,
     DeviceProtocol.ARIACAST,
     DeviceProtocol.DLNA,
+    DeviceProtocol.AIRPLAY_2,
+    DeviceProtocol.AIRPLAY,
 )
 
 /**

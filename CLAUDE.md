@@ -44,14 +44,19 @@ core/discovery/   Finding devices.
   ssdp/           SSDP multicast search (UPnP, DLNA, Sonos, HEOS, Samsung Multiroom). Message building/parsing.
   upnp/           Downloads and parses a UPnP device description; decides which protocol a device is.
   mdns/           mDNS/Bonjour browsing with NsdManager (Chromecast, AirPlay, AriaCast, Fire TV, Spotify Connect,
-                  Bose SoundTouch). The table of service types is in MdnsServices.kt.
+                  Bose SoundTouch). The table of service types is in MdnsServices.kt. AirPlay is found through
+                  `_raop._tcp` only, and its text records (encryption types, password, features) are kept in
+                  `RaopServiceInfo`. A receiver that pairs without a code (feature bit 43 or 48) is listed twice:
+                  as `AIRPLAY_2` and as `AIRPLAY`.
   DeviceRepository / NetworkDeviceRepository   Merges all discoveries into one sorted list, one entry per device id.
 core/groups/      Saved device groups (SharedPreferences + JSON). A group is a name plus its devices (host, name, protocol).
                   Clicking one on the Devices screen selects its devices that are on the network and starts streaming.
 core/streaming/   Sending audio.
   capture/        PlaybackAudioCapture: AudioRecord + MediaProjection -> 20 ms PCM frames.
   aac/            AacEncoder (MediaCodec), AdtsHeader, AacHttpStream (tiny HTTP server for /stream.aac).
-  device/         One DeviceStreamer per protocol family (upnp/, cast/, ariacast/) and the factory that picks one.
+  device/         One DeviceStreamer per protocol family (upnp/, cast/, ariacast/, airplay/, airplay2/) and the factory that picks one.
+                  `airplay/` holds AirPlay 1 and what both generations share (RTSP messages, RTP/sync/timing packets,
+                  resampling, sockets, ChaCha20-Poly1305, encrypted streams). `airplay2/` depends on `airplay/`.
   StreamingSession          Runs one session: shares the audio, starts the streamers, tracks per-device status.
                             Devices can be added and removed while it runs.
   StreamingStateRepository  What the screens observe about the (service-owned) session.
@@ -69,6 +74,10 @@ Each `*Module.kt` under a `di/` folder holds the Hilt bindings of its package. E
 PlaybackAudioCapture -> 20 ms PCM frames (48 kHz, 16-bit, stereo, 3840 bytes)
         |  shared as a hot flow; a slow listener loses its oldest frames instead of blocking the recording
         +--> AriaCastDeviceStreamer: sends the raw PCM frames over a WebSocket
+        +--> RaopDeviceStreamer: resamples to 44.1 kHz, wraps 352 frames in an uncompressed ALAC frame, encrypts
+                 it with AES and sends it as RTP over UDP (AirPlay 1)
+        +--> AirPlay2DeviceStreamer: same resampling, but sends the PCM (big-endian) encrypted with
+                 ChaCha20-Poly1305 (AirPlay 2)
         +--> AacEncoder -> ADTS frames -> AacHttpStream serves http://<phone>:<port>/stream.aac
                  ^ devices pull this URL; UpnpDeviceStreamer and ChromecastDeviceStreamer tell them to
 ```
@@ -84,9 +93,11 @@ The AAC stream is only started when a device that pulls an HTTP stream joins the
 | Sonos, HEOS, Samsung Multiroom, DLNA/UPnP | SSDP | UPnP AVTransport (`SetAVTransportURI`, `Play`, `Stop`) to the AAC URL. Sonos needs the `x-rincon-mp3radio://` scheme. |
 | Chromecast | mDNS `_googlecast._tcp` | Cast v2 protocol over TLS (port 8009), written by hand without Play Services: launch the Default Media Receiver, `LOAD` the AAC URL. |
 | AriaCast | mDNS `_audiocast._tcp` | WebSocket `ws://<host>:12889/audio`, raw PCM. The port is the documented default, not read from mDNS. |
-| AirPlay, Fire TV, Spotify Connect, Bose SoundTouch | mDNS | **Not supported.** They are listed with a "found, but not supported" label and cannot be selected. |
+| AirPlay (AirPlay 1 / RAOP) | mDNS `_raop._tcp` | RTSP over TCP (`ANNOUNCE`, `SETUP`, `RECORD`, `TEARDOWN`) on the port from mDNS, then ALAC over RTP/UDP with sync, timing and retransmission packets, like iTunes and AirPort Express. Audio is RSA/AES encrypted when the receiver lists encryption type 1 in `et`. Receivers that need a password, or only accept FairPlay/MFi encryption (`et=3`/`4`), are listed but cannot be selected. |
+| AirPlay 2 | mDNS `_raop._tcp` (feature bits) | Plain HTTP `POST /pair-setup` with transient HomeKit pairing (SRP-6a, SHA-512, fixed pin 3939), then everything on that connection is ChaCha20-Poly1305 framed. Binary-plist `SETUP` twice (session with NTP timing, then one real-time PCM stream), event channel on the port from the first answer, `RECORD`, `FLUSH`, `POST /feedback` every 2 s. Audio is RTP over UDP with ChaCha20-Poly1305 and a 1.5 s receiver buffer. Receivers that ask the user for a code are not supported. |
+| Fire TV, Spotify Connect, Bose SoundTouch | mDNS | **Not supported.** They are listed with a "found, but not supported" label and cannot be selected. |
 
-A device that is reachable by two methods of the same protocol (for example AirPlay announces `_airplay` and `_raop`) is one `StreamingDevice`, because its `id` is `protocol@host`. A device that speaks several protocols (a TV that is both Chromecast and DLNA) is found once per protocol. The Devices screen joins those finds by host into one `NetworkDevice`, and streams with its most preferred supported protocol (`STREAMING_PREFERENCE` in `NetworkDevice.kt`), unless the user chose another one in the protocol dialog (kept per device while the app runs).
+A device that is reachable by two methods of the same protocol is one `StreamingDevice`, because its `id` is `protocol@host`. That is why AirPlay is browsed through `_raop` only: `_airplay` has another port and would overwrite the one the audio must go to. A device that speaks several protocols (a TV that is both Chromecast and DLNA) is found once per protocol. The Devices screen joins those finds by host into one `NetworkDevice`, and streams with its most preferred supported protocol (`STREAMING_PREFERENCE` in `NetworkDevice.kt`), unless the user chose another one in the protocol dialog (kept per device while the app runs).
 
 ### Contracts that matter
 
@@ -108,6 +119,8 @@ A device that is reachable by two methods of the same protocol (for example AirP
 - No per-app audio filter: all phone audio is captured, and apps that opt out of capture arrive as silence.
 - A Sonos speaker that is a non-coordinator member of a group refuses to play. This is not handled.
 - Plain DLNA renderers must be able to play AAC (ADTS) streams.
+- AirPlay 1 and AirPlay 2 are verified with unit tests and with local loopback receivers (AirPlay 2 against an independent Python one built on srptools, cryptography and plistlib), not yet with real speakers. The RAOP key, SRP maths, HKDF, ChaCha20-Poly1305 and plist code are checked against reference libraries (see the test names). AirPlay 2 uses NTP timing, not PTP, and no volume or metadata messages. Receivers that need a pairing code on screen (HomePod set up with a code, Apple TV) are not supported. The phone's capture clock and the receiver's clock are not tied together, so very long sessions can drift.
+- Pairing with a random SRP key fails about once in 256 times when the key starts with a zero byte, as in pyatv. Starting the stream again works.
 - The Chromecast connection accepts any TLS certificate, because Cast devices use certificates Android does not trust. Only control messages use it.
 
 ## Commands
