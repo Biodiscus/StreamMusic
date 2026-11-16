@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import net.biodiscus.streammusic.core.discovery.DeviceRepository
+import net.biodiscus.streammusic.core.model.DeviceProtocol
 import net.biodiscus.streammusic.core.model.NetworkDevice
 import net.biodiscus.streammusic.core.model.StreamingDevice
 import net.biodiscus.streammusic.core.model.groupIntoNetworkDevices
@@ -25,10 +26,11 @@ internal class DevicesViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val selectedDeviceIds = MutableStateFlow<Set<String>>(emptySet())
+    private val chosenProtocolByDeviceId = MutableStateFlow<Map<String, DeviceProtocol>>(emptyMap())
     private val searchNumber = MutableStateFlow(0)
 
     val uiState: StateFlow<DevicesUiState> =
-        combine(foundDevices(), selectedDeviceIds, ::toUiState)
+        combine(foundDevices(), selectedDeviceIds, chosenProtocolByDeviceId, ::toUiState)
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -38,6 +40,10 @@ internal class DevicesViewModel @Inject constructor(
     fun onDeviceClicked(device: NetworkDevice) {
         if (!device.canReceiveStream) return
         selectedDeviceIds.update { selected -> toggleSelection(selected, device.id) }
+    }
+
+    fun onProtocolChosen(device: NetworkDevice, protocol: DeviceProtocol) {
+        chosenProtocolByDeviceId.update { chosen -> chosen + (device.id to protocol) }
     }
 
     fun onRefreshClicked() {
@@ -50,10 +56,14 @@ internal class DevicesViewModel @Inject constructor(
     private fun foundDevices(): Flow<List<StreamingDevice>> =
         searchNumber.flatMapLatest { deviceRepository.observeDevices() }
 
-    private fun toUiState(devices: List<StreamingDevice>, selectedIds: Set<String>): DevicesUiState =
+    private fun toUiState(
+        devices: List<StreamingDevice>,
+        selectedIds: Set<String>,
+        chosenProtocols: Map<String, DeviceProtocol>,
+    ): DevicesUiState =
         if (devices.isEmpty()) {
             DevicesUiState.Searching
         } else {
-            DevicesUiState.DevicesFound(devices.groupIntoNetworkDevices(), selectedIds)
+            DevicesUiState.DevicesFound(devices.groupIntoNetworkDevices(), selectedIds, chosenProtocols)
         }
 }

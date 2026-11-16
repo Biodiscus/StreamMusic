@@ -45,6 +45,27 @@ class NetworkDeviceTest {
     }
 
     @Test
+    fun `streams with the protocol that was chosen`() {
+        val device = aNetworkDevice(dlna, chromecast)
+
+        assertEquals(dlna, device.streamingOptionFor(DeviceProtocol.DLNA))
+    }
+
+    @Test
+    fun `streams with the best protocol when none was chosen`() {
+        val device = aNetworkDevice(dlna, chromecast)
+
+        assertEquals(chromecast, device.streamingOptionFor(null))
+    }
+
+    @Test
+    fun `streams with the best protocol when the chosen one is not available`() {
+        val device = aNetworkDevice(dlna, chromecast)
+
+        assertEquals(chromecast, device.streamingOptionFor(DeviceProtocol.SONOS))
+    }
+
+    @Test
     fun `can stream when at least one protocol is supported`() {
         assertTrue(aNetworkDevice(airPlay, dlna).canReceiveStream)
     }

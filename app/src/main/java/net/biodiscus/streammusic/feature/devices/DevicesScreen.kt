@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,7 +13,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -21,15 +24,20 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
@@ -74,6 +82,7 @@ internal fun DevicesRoute(
         uiState = uiState,
         snackbarHostState = snackbarHostState,
         onDeviceClicked = viewModel::onDeviceClicked,
+        onProtocolChosen = viewModel::onProtocolChosen,
         onRefreshClicked = viewModel::onRefreshClicked,
         onContinueClicked = startStreaming,
         modifier = modifier,
@@ -106,10 +115,13 @@ internal fun DevicesScreen(
     uiState: DevicesUiState,
     snackbarHostState: SnackbarHostState,
     onDeviceClicked: (NetworkDevice) -> Unit,
+    onProtocolChosen: (NetworkDevice, DeviceProtocol) -> Unit,
     onRefreshClicked: () -> Unit,
     onContinueClicked: (Set<String>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var protocolChoiceDeviceId by rememberSaveable { mutableStateOf<String?>(null) }
+
     Scaffold(
         modifier = modifier,
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -134,8 +146,23 @@ internal fun DevicesScreen(
         Column(Modifier.padding(contentPadding)) {
             SearchingIndicator()
             if (uiState is DevicesUiState.DevicesFound) {
-                DeviceList(uiState, onDeviceClicked)
+                DeviceList(uiState, onDeviceClicked, onChooseProtocolClicked = { device -> protocolChoiceDeviceId = device.id })
             }
+        }
+    }
+
+    if (uiState is DevicesUiState.DevicesFound) {
+        val deviceToChooseFor = uiState.devices.firstOrNull { device -> device.id == protocolChoiceDeviceId }
+        if (deviceToChooseFor != null) {
+            ProtocolChoiceDialog(
+                device = deviceToChooseFor,
+                protocolInUse = uiState.streamingOptionOf(deviceToChooseFor)?.protocol,
+                onProtocolChosen = { protocol ->
+                    onProtocolChosen(deviceToChooseFor, protocol)
+                    protocolChoiceDeviceId = null
+                },
+                onDismiss = { protocolChoiceDeviceId = null },
+            )
         }
     }
 }
@@ -154,13 +181,16 @@ private fun SearchingIndicator() {
 private fun DeviceList(
     uiState: DevicesUiState.DevicesFound,
     onDeviceClicked: (NetworkDevice) -> Unit,
+    onChooseProtocolClicked: (NetworkDevice) -> Unit,
 ) {
     LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
         items(items = uiState.devices, key = { device -> device.id }) { device ->
             DeviceRow(
                 device = device,
                 isSelected = device.id in uiState.selectedDeviceIds,
+                protocolInUse = uiState.streamingOptionOf(device)?.protocol,
                 onClick = { onDeviceClicked(device) },
+                onChooseProtocolClicked = { onChooseProtocolClicked(device) },
             )
         }
     }
@@ -170,29 +200,61 @@ private fun DeviceList(
 internal fun DeviceRow(
     device: NetworkDevice,
     isSelected: Boolean,
+    protocolInUse: DeviceProtocol?,
     onClick: () -> Unit,
+    onChooseProtocolClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val rowModifier = if (device.canReceiveStream) modifier.clickable(onClick = onClick) else modifier
     ListItem(
         modifier = rowModifier,
         headlineContent = { Text(device.name) },
-        supportingContent = { Text(deviceDescription(device)) },
+        supportingContent = { Text(deviceDescription(device, protocolInUse)) },
         trailingContent = {
-            Checkbox(checked = isSelected, onCheckedChange = null, enabled = device.canReceiveStream)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (device.streamingOptions.size > 1) {
+                    IconButton(onClick = onChooseProtocolClicked) {
+                        Icon(Icons.Filled.Tune, contentDescription = stringResource(R.string.devices_choose_protocol))
+                    }
+                }
+                Checkbox(checked = isSelected, onCheckedChange = null, enabled = device.canReceiveStream)
+            }
         },
     )
 }
 
 @Composable
-private fun deviceDescription(device: NetworkDevice): String {
+private fun deviceDescription(device: NetworkDevice, protocolInUse: DeviceProtocol?): String {
+    if (protocolInUse != null) return "${protocolInUse.displayName} · ${device.host}"
     val protocolNames = device.protocols.joinToString(" · ") { protocol -> protocol.displayName }
-    val protocolAndAddress = "$protocolNames · ${device.host}"
-    return if (device.canReceiveStream) {
-        protocolAndAddress
-    } else {
-        "$protocolAndAddress\n${stringResource(R.string.devices_discovery_only)}"
-    }
+    return "$protocolNames · ${device.host}\n${stringResource(R.string.devices_discovery_only)}"
+}
+
+@Composable
+private fun ProtocolChoiceDialog(
+    device: NetworkDevice,
+    protocolInUse: DeviceProtocol?,
+    onProtocolChosen: (DeviceProtocol) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.devices_choose_protocol_title, device.name)) },
+        text = {
+            Column {
+                device.streamingOptions.forEach { option ->
+                    ListItem(
+                        modifier = Modifier.clickable { onProtocolChosen(option.protocol) },
+                        headlineContent = { Text(option.protocol.displayName) },
+                        trailingContent = { RadioButton(selected = option.protocol == protocolInUse, onClick = null) },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.devices_choose_protocol_cancel)) }
+        },
+    )
 }
 
 @ThemePreviews
@@ -206,6 +268,7 @@ private fun DevicesScreenPreview() {
                 selectedDeviceIds = setOf("192.168.1.20"),
             ),
             onDeviceClicked = {},
+            onProtocolChosen = { _, _ -> },
             onRefreshClicked = {},
             onContinueClicked = {},
         )

@@ -114,6 +114,21 @@ class DevicesViewModelTest {
     }
 
     @Test
+    fun `choosing a protocol is remembered for that device`() = runTest {
+        val kitchenDlna = aDevice(protocol = DeviceProtocol.DLNA, host = kitchen.host)
+        val device = aNetworkDevice(kitchen, kitchenDlna)
+        repository.setFoundDevices(kitchen, kitchenDlna)
+        viewModel.uiState.test {
+            awaitItem()
+
+            viewModel.onProtocolChosen(device, DeviceProtocol.DLNA)
+
+            val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
+            assertEquals(mapOf(kitchen.host to DeviceProtocol.DLNA), uiState.chosenProtocolByDeviceId)
+        }
+    }
+
+    @Test
     fun `lists a device that speaks several protocols once`() = runTest {
         val kitchenDlna = aDevice(name = "Kitchen DLNA", protocol = DeviceProtocol.DLNA, host = kitchen.host)
         viewModel.uiState.test {

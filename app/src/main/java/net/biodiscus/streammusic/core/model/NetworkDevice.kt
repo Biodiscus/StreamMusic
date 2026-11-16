@@ -29,6 +29,12 @@ data class NetworkDevice(
 
     val bestStreamingOption: StreamingDevice? = streamingOptions.firstOrNull()
 
+    /** The option for the protocol the user chose, or [bestStreamingOption] when none was chosen or it is gone. */
+    fun streamingOptionFor(chosenProtocol: DeviceProtocol?): StreamingDevice? {
+        val chosenOption = streamingOptions.firstOrNull { option -> option.protocol == chosenProtocol }
+        return chosenOption ?: bestStreamingOption
+    }
+
     val canReceiveStream: Boolean = bestStreamingOption != null
 
     val name: String = (bestStreamingOption ?: options.first()).name

@@ -28,6 +28,19 @@ class DevicesUiStateTest {
     }
 
     @Test
+    fun `a selected device is streamed to with the protocol the user chose`() {
+        val dlna = aDevice(protocol = DeviceProtocol.DLNA, host = "10.0.0.2")
+        val chromecast = aDevice(protocol = DeviceProtocol.CHROMECAST, host = "10.0.0.2")
+        val uiState = DevicesUiState.DevicesFound(
+            devices = listOf(aNetworkDevice(dlna, chromecast)),
+            selectedDeviceIds = setOf("10.0.0.2"),
+            chosenProtocolByDeviceId = mapOf("10.0.0.2" to DeviceProtocol.DLNA),
+        )
+
+        assertEquals(setOf(dlna.id), uiState.selectedStreamingDeviceIds)
+    }
+
+    @Test
     fun `a device that is not selected is not streamed to`() {
         val uiState = DevicesUiState.DevicesFound(listOf(aNetworkDevice(aDevice())), emptySet())
 

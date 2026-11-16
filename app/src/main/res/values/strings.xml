@@ -13,6 +13,9 @@
         <item quantity="one">Stream to %1$d device</item>
         <item quantity="other">Stream to %1$d devices</item>
     </plurals>
+    <string name="devices_choose_protocol">Choose how to stream</string>
+    <string name="devices_choose_protocol_title">Stream to %1$s with</string>
+    <string name="devices_choose_protocol_cancel">Cancel</string>
     <string name="devices_record_audio_denied">Allow the microphone permission so StreamMusic can capture the audio your phone plays.</string>
     <string name="devices_permission_title">Allow access to devices on your network</string>
     <string name="devices_permission_body">StreamMusic needs this permission to find speakers and TVs on your Wi-Fi.</string>

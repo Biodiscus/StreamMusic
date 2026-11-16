@@ -83,7 +83,7 @@ The AAC stream is only started when at least one chosen device pulls an HTTP str
 | AriaCast | mDNS `_audiocast._tcp` | WebSocket `ws://<host>:12889/audio`, raw PCM. The port is the documented default, not read from mDNS. |
 | AirPlay, Fire TV, Spotify Connect, Bose SoundTouch | mDNS | **Not supported.** They are listed with a "found, but not supported" label and cannot be selected. |
 
-A device that is reachable by two methods of the same protocol (for example AirPlay announces `_airplay` and `_raop`) is one `StreamingDevice`, because its `id` is `protocol@host`. A device that speaks several protocols (a TV that is both Chromecast and DLNA) is found once per protocol. The Devices screen joins those finds by host into one `NetworkDevice`, and streams with its most preferred supported protocol (`STREAMING_PREFERENCE` in `NetworkDevice.kt`).
+A device that is reachable by two methods of the same protocol (for example AirPlay announces `_airplay` and `_raop`) is one `StreamingDevice`, because its `id` is `protocol@host`. A device that speaks several protocols (a TV that is both Chromecast and DLNA) is found once per protocol. The Devices screen joins those finds by host into one `NetworkDevice`, and streams with its most preferred supported protocol (`STREAMING_PREFERENCE` in `NetworkDevice.kt`), unless the user chose another one in the protocol dialog (kept per device while the app runs).
 
 ### Contracts that matter
 
