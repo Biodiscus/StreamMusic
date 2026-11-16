@@ -7,14 +7,13 @@ import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.net.Inet4Address
 import javax.inject.Inject
-import kotlin.coroutines.resume
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import net.biodiscus.streammusic.core.discovery.DeviceDiscovery
 import net.biodiscus.streammusic.core.model.DeviceProtocol
@@ -74,20 +73,16 @@ internal class MdnsDeviceDiscovery @Inject constructor(
     private suspend fun resolveWithTimeout(nsdManager: NsdManager, info: NsdServiceInfo): NsdServiceInfo? =
         withTimeoutOrNull(RESOLVE_TIMEOUT_MILLIS) { resolve(nsdManager, info) }
 
-    @Suppress("DEPRECATION") // The replacement needs API 34 and this app supports API 29.
-    private suspend fun resolve(nsdManager: NsdManager, info: NsdServiceInfo): NsdServiceInfo? =
-        suspendCancellableCoroutine { continuation ->
-            nsdManager.resolveService(info, object : NsdManager.ResolveListener {
-                override fun onServiceResolved(serviceInfo: NsdServiceInfo) = continuation.resume(serviceInfo)
-
-                override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                    Log.w(LOG_TAG, "Could not resolve ${serviceInfo.serviceName}: error $errorCode")
-                    continuation.resume(null)
-                }
-            })
+    private suspend fun resolve(nsdManager: NsdManager, info: NsdServiceInfo): NsdServiceInfo? {
+        val callback = FirstResolveCallback()
+        nsdManager.registerServiceInfoCallback(info, context.mainExecutor, callback)
+        try {
+            return callback.resolved.await()
+        } finally {
+            if (callback.isRegistered) nsdManager.unregisterServiceInfoCallback(callback)
         }
+    }
 
-    @Suppress("DEPRECATION") // The replacement (hostAddresses) needs API 34.
     private fun toStreamingDevice(resolved: NsdServiceInfo, protocol: DeviceProtocol): StreamingDevice? {
         val address = resolved.host as? Inet4Address ?: return null
         val textRecords = resolved.attributes.mapValues { (_, bytes) -> String(bytes ?: ByteArray(0)) }
@@ -98,6 +93,29 @@ internal class MdnsDeviceDiscovery @Inject constructor(
             port = resolved.port,
         )
     }
+}
+
+/** Keeps only the first answer: the callback is called again whenever the service changes. */
+private class FirstResolveCallback : NsdManager.ServiceInfoCallback {
+    val resolved = CompletableDeferred<NsdServiceInfo?>()
+    var isRegistered = true
+        private set
+
+    override fun onServiceUpdated(serviceInfo: NsdServiceInfo) {
+        resolved.complete(serviceInfo)
+    }
+
+    override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
+        Log.w(LOG_TAG, "Could not resolve a service: error $errorCode")
+        isRegistered = false
+        resolved.complete(null)
+    }
+
+    override fun onServiceLost() {
+        resolved.complete(null)
+    }
+
+    override fun onServiceInfoCallbackUnregistered() = Unit
 }
 
 private class ServiceBrowseListener(

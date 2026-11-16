@@ -14,8 +14,8 @@ android {
 
     defaultConfig {
         applicationId = "net.biodiscus.streammusic"
-        // Capturing another app's audio (AudioPlaybackCapture) needs Android 10.
-        minSdk = 29
+        // NsdManager.registerServiceInfoCallback (mDNS resolving) needs Android 14.
+        minSdk = 34
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"

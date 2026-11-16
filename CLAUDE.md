@@ -1,6 +1,6 @@
 # StreamMusic
 
-Android app that finds speakers and TVs on the local network and streams the audio of the phone to several of them at once. Package `net.biodiscus.streammusic`, minSdk 29 (capturing other apps' audio needs Android 10), targetSdk 37, Kotlin, Jetpack Compose, Hilt, Gradle Kotlin DSL with a version catalog (`gradle/libs.versions.toml`).
+Android app that finds speakers and TVs on the local network and streams the audio of the phone to several of them at once. Package `net.biodiscus.streammusic`, minSdk 34 (resolving mDNS services without deprecated APIs needs Android 14), targetSdk 37, Kotlin, Jetpack Compose, Hilt, Gradle Kotlin DSL with a version catalog (`gradle/libs.versions.toml`).
 
 ## Android skill
 
