@@ -179,22 +179,45 @@ class RaopDeviceStreamerTest {
         assertTrue(result.exceptionOrNull() is IOException)
     }
 
+    @Test
+    fun `starts the timeline one second later for an audio delay of one second`() = runTest {
+        val noDelayJob = startStreaming(frameCount = 0)
+        val startWithoutDelay = recordRtpTime()
+        noDelayJob.cancelAndJoin()
+        connection.rtspRequests.clear()
+
+        val delayedJob = startStreaming(frameCount = 0, audioDelayMillis = 1_000)
+
+        assertEquals(startWithoutDelay + 44_100, recordRtpTime())
+        delayedJob.cancelAndJoin()
+    }
+
+    private fun recordRtpTime(): Long {
+        val record = connection.rtspRequests.first { request -> request.method == "RECORD" }
+        return record.headers.getValue("RTP-Info").substringAfter("rtptime=").toLong()
+    }
+
     private fun TestScope.startStreaming(
         frameCount: Int,
         device: StreamingDevice = clearAudioDevice,
+        audioDelayMillis: Int = 0,
         onStreaming: () -> Unit = {},
     ): Job {
-        val job = launch { streamerFor(frameCount, device).stream(onStreaming) }
+        val job = launch { streamerFor(frameCount, device, audioDelayMillis).stream(onStreaming) }
         runCurrent()
         return job
     }
 
-    private fun streamerFor(frameCount: Int, device: StreamingDevice = clearAudioDevice): RaopDeviceStreamer {
+    private fun streamerFor(
+        frameCount: Int,
+        device: StreamingDevice = clearAudioDevice,
+        audioDelayMillis: Int = 0,
+    ): RaopDeviceStreamer {
         val pcmFrames = flow {
             repeat(frameCount) { emit(ByteArray(PcmFormat.BYTES_PER_FRAME)) }
             awaitCancellation()
         }
-        return RaopDeviceStreamer(device, SessionAudio(pcmFrames, aacStreamPort = null), connector) { 1_763_000_000_000 }
+        return RaopDeviceStreamer(device, SessionAudio(pcmFrames, httpStream = null), connector, audioDelayMillis) { 1_763_000_000_000 }
     }
 }
 

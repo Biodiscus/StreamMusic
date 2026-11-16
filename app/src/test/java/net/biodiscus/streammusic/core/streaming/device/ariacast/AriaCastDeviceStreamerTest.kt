@@ -86,7 +86,7 @@ class AriaCastDeviceStreamerTest {
             frames.forEach { emit(it) }
             awaitCancellation()
         }
-        return AriaCastDeviceStreamer(device, SessionAudio(pcmFrames, aacStreamPort = null), connector)
+        return AriaCastDeviceStreamer(device, SessionAudio(pcmFrames, httpStream = null), connector)
     }
 }
 

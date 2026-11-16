@@ -1,4 +1,4 @@
-package net.biodiscus.streammusic.core.streaming.aac
+package net.biodiscus.streammusic.core.streaming.http
 
 import java.io.BufferedReader
 import java.io.IOException
@@ -12,32 +12,40 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.launch
+import net.biodiscus.streammusic.core.model.StreamAudioFormat
+import net.biodiscus.streammusic.core.streaming.aac.AacEncoder
 
-private const val STREAM_PATH = "/stream.aac"
 private const val REQUEST_READ_TIMEOUT_MILLIS = 5_000
-private const val AAC_FRAMES_KEPT_PER_LISTENER = 100
+private const val AUDIO_FRAMES_KEPT_PER_LISTENER = 100
 
-/** Encodes PCM to AAC once and serves it to every device that connects, like an internet radio station. */
-internal class AacHttpStreamStarter @Inject constructor() : AacStreamStarter {
-    override fun start(scope: CoroutineScope, pcmFrames: Flow<ByteArray>): RunningAacStream {
-        val aacFrames = AacEncoder()
-            .encode(pcmFrames)
-            .flowOn(Dispatchers.Default)
-            .buffer(AAC_FRAMES_KEPT_PER_LISTENER, BufferOverflow.DROP_OLDEST)
+/** Encodes PCM to the format once and serves it to every device that connects, like an internet radio station. */
+internal class HttpAudioStreamServerStarter @Inject constructor() : HttpAudioStreamStarter {
+    override fun start(scope: CoroutineScope, pcmFrames: Flow<ByteArray>, format: StreamAudioFormat): RunningHttpAudioStream {
+        val audioFrames = encode(pcmFrames, format)
+            .buffer(AUDIO_FRAMES_KEPT_PER_LISTENER, BufferOverflow.DROP_OLDEST)
             .shareIn(scope, SharingStarted.Eagerly)
-        val stream = AacHttpStream(scope, aacFrames)
+        val stream = HttpAudioStream(scope, audioFrames, format)
         stream.startAcceptingListeners()
         return stream
     }
+
+    private fun encode(pcmFrames: Flow<ByteArray>, format: StreamAudioFormat): Flow<ByteArray> =
+        when (format) {
+            StreamAudioFormat.AAC -> AacEncoder().encode(pcmFrames).flowOn(Dispatchers.Default)
+            StreamAudioFormat.LPCM -> pcmFrames.map { pcmFrame -> toBigEndianSamples(pcmFrame) }
+            StreamAudioFormat.WAV -> pcmFrames
+        }
 }
 
-private class AacHttpStream(
+private class HttpAudioStream(
     private val scope: CoroutineScope,
-    private val aacFrames: Flow<ByteArray>,
-) : RunningAacStream {
+    private val audioFrames: Flow<ByteArray>,
+    override val format: StreamAudioFormat,
+) : RunningHttpAudioStream {
 
     private val serverSocket = ServerSocket(0)
     private val listenerSockets: MutableSet<Socket> = Collections.synchronizedSet(mutableSetOf())
@@ -79,10 +87,11 @@ private class AacHttpStream(
     private suspend fun sendStream(socket: Socket) {
         val requestLine = readRequestLine(socket)
         val output = socket.getOutputStream()
-        output.write(buildStreamResponseHeaders().toByteArray())
+        output.write(buildStreamResponseHeaders(format).toByteArray())
         output.flush()
         if (isHeadRequest(requestLine)) return
-        aacFrames.collect { frame ->
+        output.write(streamPreambleOf(format))
+        audioFrames.collect { frame ->
             output.write(frame)
             output.flush()
         }
@@ -105,9 +114,9 @@ private class AacHttpStream(
     }
 }
 
-internal fun buildStreamResponseHeaders(): String =
+internal fun buildStreamResponseHeaders(format: StreamAudioFormat): String =
     "HTTP/1.0 200 OK\r\n" +
-        "Content-Type: audio/aac\r\n" +
+        "Content-Type: ${httpContentTypeOf(format)}\r\n" +
         "Cache-Control: no-cache, no-store\r\n" +
         "Connection: close\r\n" +
         "icy-name: StreamMusic\r\n" +
@@ -115,4 +124,5 @@ internal fun buildStreamResponseHeaders(): String =
 
 internal fun isHeadRequest(requestLine: String): Boolean = requestLine.startsWith("HEAD ")
 
-internal fun streamUrl(host: String, port: Int): String = "http://$host:$port$STREAM_PATH"
+internal fun streamUrl(host: String, port: Int, format: StreamAudioFormat): String =
+    "http://$host:$port/stream.${urlExtensionOf(format)}"

@@ -12,6 +12,6 @@ internal fun NavGraphBuilder.settingsScreen(
     onDiscoveryDebugClicked: () -> Unit,
 ) {
     composable<SettingsDestination> {
-        SettingsScreen(onBackClicked = onBackClicked, onDiscoveryDebugClicked = onDiscoveryDebugClicked)
+        SettingsRoute(onBackClicked = onBackClicked, onDiscoveryDebugClicked = onDiscoveryDebugClicked)
     }
 }

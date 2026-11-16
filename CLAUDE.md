@@ -51,9 +51,13 @@ core/discovery/   Finding devices.
   DeviceRepository / NetworkDeviceRepository   Merges all discoveries into one sorted list, one entry per device id.
 core/groups/      Saved device groups (SharedPreferences + JSON). A group is a name plus its devices (host, name, protocol).
                   Clicking one on the Devices screen selects its devices that are on the network and starts streaming.
+core/settings/    App settings (SharedPreferences): which protocols are shown (AirPlay and AirPlay 2 each have their own switch), hide single-app capture,
+                  audio format per family (AAC/LPCM/WAV), AirPlay audio delay, Chromecast disconnect on mute.
+                  A disabled protocol is only hidden from the Devices list; the network search still runs.
 core/streaming/   Sending audio.
   capture/        PlaybackAudioCapture: AudioRecord + MediaProjection -> 20 ms PCM frames.
-  aac/            AacEncoder (MediaCodec), AdtsHeader, AacHttpStream (tiny HTTP server for /stream.aac).
+  aac/            AacEncoder (MediaCodec), AdtsHeader.
+  http/           The tiny HTTP server that devices pull from (/stream.aac, /stream.wav, /stream.l16), one stream per audio format.
   device/         One DeviceStreamer per protocol family (upnp/, cast/, ariacast/, airplay/, airplay2/) and the factory that picks one.
                   `airplay/` holds AirPlay 1 and what both generations share (RTSP messages, RTP/sync/timing packets,
                   resampling, sockets, ChaCha20-Poly1305, encrypted streams). `airplay2/` depends on `airplay/`.
@@ -78,11 +82,11 @@ PlaybackAudioCapture -> 20 ms PCM frames (48 kHz, 16-bit, stereo, 3840 bytes)
                  it with AES and sends it as RTP over UDP (AirPlay 1)
         +--> AirPlay2DeviceStreamer: same resampling, but sends the PCM (big-endian) encrypted with
                  ChaCha20-Poly1305 (AirPlay 2)
-        +--> AacEncoder -> ADTS frames -> AacHttpStream serves http://<phone>:<port>/stream.aac
+        +--> AacEncoder -> ADTS frames (or WAV / big-endian LPCM, by setting) -> the HTTP server serves http://<phone>:<port>/stream.<aac|wav|l16>
                  ^ devices pull this URL; UpnpDeviceStreamer and ChromecastDeviceStreamer tell them to
 ```
 
-The AAC stream is only started when a device that pulls an HTTP stream joins the session (at the start or later), and all such devices share it.
+An HTTP stream is only started when a device that pulls one joins the session (at the start or later). Devices that need the same audio format share a stream; the format per protocol family comes from the settings (AAC unless the user chose WAV or LPCM).
 
 ### Protocols
 
@@ -119,6 +123,8 @@ A device that is reachable by two methods of the same protocol is one `Streaming
 - No per-app audio filter: all phone audio is captured, and apps that opt out of capture arrive as silence.
 - A Sonos speaker that is a non-coordinator member of a group refuses to play. This is not handled.
 - Plain DLNA renderers must be able to play AAC (ADTS) streams.
+- The WAV and LPCM stream formats, the AirPlay audio delay and the Chromecast "disconnect on mute" setting are covered by unit tests only, not yet tried on real devices. Sonos with WAV goes through the `x-rincon-mp3radio://` scheme and may refuse it. The AirPlay delay is sent as a later start of the RTP timeline, and the phone holds the audio back until then.
+- Disconnect on mute ends that device as "failed" with the reason "Chromecast was muted", because a device can only stop by failing.
 - AirPlay 1 and AirPlay 2 are verified with unit tests and with local loopback receivers (AirPlay 2 against an independent Python one built on srptools, cryptography and plistlib), not yet with real speakers. The RAOP key, SRP maths, HKDF, ChaCha20-Poly1305 and plist code are checked against reference libraries (see the test names). AirPlay 2 uses NTP timing, not PTP, and no volume or metadata messages. Receivers that need a pairing code on screen (HomePod set up with a code, Apple TV) are not supported. The phone's capture clock and the receiver's clock are not tied together, so very long sessions can drift.
 - Pairing with a random SRP key fails about once in 256 times when the key starts with a zero byte, as in pyatv. Starting the stream again works.
 - The Chromecast connection accepts any TLS certificate, because Cast devices use certificates Android does not trust. Only control messages use it.

@@ -10,10 +10,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import net.biodiscus.streammusic.core.discovery.DeviceRepository
 import net.biodiscus.streammusic.core.groups.DeviceGroupRepository
+import net.biodiscus.streammusic.core.model.AppSettings
 import net.biodiscus.streammusic.core.model.DeviceGroup
 import net.biodiscus.streammusic.core.model.DeviceGroupColor
 import net.biodiscus.streammusic.core.model.DeviceGroupIcon
@@ -25,7 +27,9 @@ import net.biodiscus.streammusic.core.model.StreamingState
 import net.biodiscus.streammusic.core.model.groupIntoNetworkDevices
 import net.biodiscus.streammusic.core.model.isSavableGroup
 import net.biodiscus.streammusic.core.model.isValidGroupName
+import net.biodiscus.streammusic.core.model.withoutDisabledProtocols
 import net.biodiscus.streammusic.core.streaming.StreamingController
+import net.biodiscus.streammusic.core.settings.SettingsRepository
 import net.biodiscus.streammusic.core.streaming.StreamingStateRepository
 
 private const val STOP_TIMEOUT_MILLIS = 5_000L
@@ -36,6 +40,7 @@ internal class DevicesViewModel @Inject constructor(
     private val streamingStateRepository: StreamingStateRepository,
     private val streamingController: StreamingController,
     private val deviceGroupRepository: DeviceGroupRepository,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     private val selectedDeviceIds = MutableStateFlow(deviceIdsInStream(streamingStateRepository.state.value))
@@ -44,7 +49,7 @@ internal class DevicesViewModel @Inject constructor(
 
     val uiState: StateFlow<DevicesUiState> =
         combine(
-            foundDevices(),
+            foundNetworkDevices(),
             selectedDeviceIds,
             chosenProtocolByDeviceId,
             streamingStateRepository.state,
@@ -55,6 +60,15 @@ internal class DevicesViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = DevicesUiState.Searching(),
         )
+
+    val hidesSingleAppCapture: StateFlow<Boolean> =
+        settingsRepository.observeSettings()
+            .map { settings -> settings.hidesSingleAppCapture }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+                initialValue = AppSettings().hidesSingleAppCapture,
+            )
 
     /** While a stream is running, ticking a device also starts it and unticking stops it. */
     fun onDeviceClicked(device: NetworkDevice) {
@@ -138,12 +152,18 @@ internal class DevicesViewModel @Inject constructor(
         return streamingState.devices.firstOrNull { streamingDevice -> streamingDevice.host == device.id }
     }
 
+    private fun foundNetworkDevices(): Flow<List<NetworkDevice>> =
+        combine(searchedDevices(), settingsRepository.observeSettings(), ::toNetworkDevices)
+
     /** Starting a new search number restarts the network search. */
-    private fun foundDevices(): Flow<List<StreamingDevice>> =
+    private fun searchedDevices(): Flow<List<StreamingDevice>> =
         searchNumber.flatMapLatest { deviceRepository.observeDevices() }
 
+    private fun toNetworkDevices(devices: List<StreamingDevice>, settings: AppSettings): List<NetworkDevice> =
+        devices.withoutDisabledProtocols(settings).groupIntoNetworkDevices()
+
     private fun toUiState(
-        devices: List<StreamingDevice>,
+        devices: List<NetworkDevice>,
         selectedIds: Set<String>,
         chosenProtocols: Map<String, DeviceProtocol>,
         streamingState: StreamingState,
@@ -152,7 +172,7 @@ internal class DevicesViewModel @Inject constructor(
         val isStreaming = streamingState is StreamingState.Active
         if (devices.isEmpty()) return DevicesUiState.Searching(isStreaming)
         return DevicesUiState.DevicesFound(
-            devices = devices.groupIntoNetworkDevices(),
+            devices = devices,
             selectedDeviceIds = selectedIds,
             chosenProtocolByDeviceId = chosenProtocols,
             streamStatusByDeviceId = streamStatusByDeviceId(streamingState),

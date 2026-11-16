@@ -18,23 +18,34 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.biodiscus.streammusic.core.model.DeviceStreamStatus
+import net.biodiscus.streammusic.core.model.StreamAudioFormat
+import net.biodiscus.streammusic.core.model.audioFormatFor
 import net.biodiscus.streammusic.core.model.StreamTransport
 import net.biodiscus.streammusic.core.model.StreamingDevice
-import net.biodiscus.streammusic.core.streaming.aac.AacStreamStarter
-import net.biodiscus.streammusic.core.streaming.aac.RunningAacStream
+import net.biodiscus.streammusic.core.settings.SettingsRepository
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamerFactory
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
+import net.biodiscus.streammusic.core.streaming.http.HttpAudioStreamStarter
+import net.biodiscus.streammusic.core.streaming.http.RunningHttpAudioStream
 
 private const val PCM_FRAMES_KEPT_PER_LISTENER = 100
 
 internal class StreamingSessionFactory @Inject constructor(
     private val streamerFactory: DeviceStreamerFactory,
-    private val aacStreamStarter: AacStreamStarter,
+    private val httpAudioStreamStarter: HttpAudioStreamStarter,
     private val stateRepository: StreamingStateRepository,
     private val phoneMusicVolume: PhoneMusicVolume,
+    private val settingsRepository: SettingsRepository,
 ) {
     fun create(devices: List<StreamingDevice>, capturedPcm: Flow<ByteArray>) = StreamingSession(
-        devices, capturedPcm, streamerFactory, aacStreamStarter, stateRepository, phoneMusicVolume, Dispatchers.IO,
+        devices,
+        capturedPcm,
+        streamerFactory,
+        httpAudioStreamStarter,
+        stateRepository,
+        phoneMusicVolume,
+        settingsRepository,
+        Dispatchers.IO,
     )
 }
 
@@ -49,16 +60,17 @@ internal class StreamingSession(
     private val initialDevices: List<StreamingDevice>,
     private val capturedPcm: Flow<ByteArray>,
     private val streamerFactory: DeviceStreamerFactory,
-    private val aacStreamStarter: AacStreamStarter,
+    private val httpAudioStreamStarter: HttpAudioStreamStarter,
     private val stateRepository: StreamingStateRepository,
     private val phoneMusicVolume: PhoneMusicVolume,
+    private val settingsRepository: SettingsRepository,
     private val dispatcher: CoroutineDispatcher,
 ) {
     private val deviceChanges = Channel<DeviceChange>(Channel.UNLIMITED)
 
     // Only touched by the coroutine that runs the session, one change at a time.
     private val streamingJobsByDeviceId = mutableMapOf<String, Job>()
-    private var aacStream: RunningAacStream? = null
+    private val httpStreamsByFormat = mutableMapOf<StreamAudioFormat, RunningHttpAudioStream>()
 
     /** Starts streaming to a device that is not part of the session yet. Safe to call from any thread. */
     fun addDevice(device: StreamingDevice) {
@@ -86,7 +98,7 @@ internal class StreamingSession(
             applyDeviceChanges(scope = this, pcmFrames)
         } finally {
             phoneMusicVolume.level = volumeBeforeStreaming
-            aacStream?.stop()
+            httpStreamsByFormat.values.forEach { stream -> stream.stop() }
             stateRepository.streamingEnded()
         }
     }
@@ -126,21 +138,15 @@ internal class StreamingSession(
             .shareIn(scope, SharingStarted.Eagerly)
 
     private fun startStreamingTo(device: StreamingDevice, scope: CoroutineScope, pcmFrames: Flow<ByteArray>) {
-        val audio = SessionAudio(pcmFrames, aacStreamPortFor(device, scope, pcmFrames))
+        val audio = SessionAudio(pcmFrames, httpStreamFor(device, scope, pcmFrames))
         streamingJobsByDeviceId[device.id] = scope.launch { streamToDevice(device, audio) }
     }
 
-    /** The AAC stream only runs when a device needs it, and then it is shared by all devices that do. */
-    private fun aacStreamPortFor(device: StreamingDevice, scope: CoroutineScope, pcmFrames: Flow<ByteArray>): Int? {
+    /** An HTTP stream only runs when a device needs it, and then it is shared by all devices that need the same format. */
+    private fun httpStreamFor(device: StreamingDevice, scope: CoroutineScope, pcmFrames: Flow<ByteArray>): RunningHttpAudioStream? {
         if (device.protocol.transport != StreamTransport.DEVICE_PULLS_HTTP_STREAM) return null
-        val runningStream = aacStream ?: startAacStream(scope, pcmFrames)
-        return runningStream.port
-    }
-
-    private fun startAacStream(scope: CoroutineScope, pcmFrames: Flow<ByteArray>): RunningAacStream {
-        val runningStream = aacStreamStarter.start(scope, pcmFrames)
-        aacStream = runningStream
-        return runningStream
+        val format = settingsRepository.currentSettings.audioFormatFor(device.protocol)
+        return httpStreamsByFormat.getOrPut(format) { httpAudioStreamStarter.start(scope, pcmFrames, format) }
     }
 
     private suspend fun streamToDevice(device: StreamingDevice, audio: SessionAudio) {

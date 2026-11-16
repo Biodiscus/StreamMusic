@@ -80,11 +80,13 @@ internal fun DevicesRoute(
     }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val hidesSingleAppCapture by viewModel.hidesSingleAppCapture.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val recordAudioDeniedMessage = stringResource(R.string.devices_record_audio_denied)
 
     val startStreaming = rememberStreamStarter(
+        hidesSingleAppCapture = hidesSingleAppCapture,
         onRecordAudioDenied = {
             coroutineScope.launch { snackbarHostState.showSnackbar(recordAudioDeniedMessage) }
         },

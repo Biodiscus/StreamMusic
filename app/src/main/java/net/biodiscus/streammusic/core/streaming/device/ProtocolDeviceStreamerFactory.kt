@@ -3,6 +3,7 @@ package net.biodiscus.streammusic.core.streaming.device
 import javax.inject.Inject
 import net.biodiscus.streammusic.core.model.DeviceProtocol
 import net.biodiscus.streammusic.core.model.StreamingDevice
+import net.biodiscus.streammusic.core.settings.SettingsRepository
 import net.biodiscus.streammusic.core.streaming.device.airplay.RaopConnector
 import net.biodiscus.streammusic.core.streaming.device.airplay.RaopDeviceStreamer
 import net.biodiscus.streammusic.core.streaming.device.airplay2.AirPlay2DeviceStreamer
@@ -18,24 +19,42 @@ internal class ProtocolDeviceStreamerFactory @Inject constructor(
     private val castChannelOpener: CastChannelOpener,
     private val ariaCastConnector: AriaCastConnector,
     private val raopConnector: RaopConnector,
+    private val settingsRepository: SettingsRepository,
 ) : DeviceStreamerFactory {
 
-    override fun create(device: StreamingDevice, audio: SessionAudio): DeviceStreamer =
-        when (device.protocol) {
+    override fun create(device: StreamingDevice, audio: SessionAudio): DeviceStreamer {
+        val settings = settingsRepository.currentSettings
+        return when (device.protocol) {
             DeviceProtocol.SONOS,
             DeviceProtocol.HEOS,
             DeviceProtocol.SAMSUNG_MULTIROOM,
             DeviceProtocol.DLNA,
             -> UpnpDeviceStreamer(device, audio, avTransportClient)
 
-            DeviceProtocol.CHROMECAST -> ChromecastDeviceStreamer(device, audio, castChannelOpener)
+            DeviceProtocol.CHROMECAST -> ChromecastDeviceStreamer(
+                device,
+                audio,
+                disconnectsOnMute = settings.disconnectsChromecastOnMute,
+                channelOpener = castChannelOpener,
+            )
             DeviceProtocol.ARIACAST -> AriaCastDeviceStreamer(device, audio, ariaCastConnector)
-            DeviceProtocol.AIRPLAY -> RaopDeviceStreamer(device, audio, raopConnector)
-            DeviceProtocol.AIRPLAY_2 -> AirPlay2DeviceStreamer(device, audio, raopConnector)
+            DeviceProtocol.AIRPLAY -> RaopDeviceStreamer(
+                device,
+                audio,
+                raopConnector,
+                audioDelayMillis = settings.airPlayAudioDelayMillis,
+            )
+            DeviceProtocol.AIRPLAY_2 -> AirPlay2DeviceStreamer(
+                device,
+                audio,
+                raopConnector,
+                audioDelayMillis = settings.airPlayAudioDelayMillis,
+            )
 
             DeviceProtocol.FIRE_TV,
             DeviceProtocol.SPOTIFY_CONNECT,
             DeviceProtocol.BOSE_SOUNDTOUCH,
             -> error("Streaming to ${device.protocol.displayName} is not supported")
         }
+    }
 }

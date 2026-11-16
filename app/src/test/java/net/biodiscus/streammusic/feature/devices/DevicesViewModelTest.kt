@@ -6,9 +6,11 @@ import net.biodiscus.streammusic.core.model.DeviceGroupColor
 import net.biodiscus.streammusic.core.model.DeviceGroupIcon
 import net.biodiscus.streammusic.core.model.DeviceProtocol
 import net.biodiscus.streammusic.core.model.DeviceStreamStatus
+import net.biodiscus.streammusic.core.model.ProtocolFamily
 import net.biodiscus.streammusic.core.streaming.StreamingStateRepository
 import net.biodiscus.streammusic.testing.FakeDeviceGroupRepository
 import net.biodiscus.streammusic.testing.FakeDeviceRepository
+import net.biodiscus.streammusic.testing.FakeSettingsRepository
 import net.biodiscus.streammusic.testing.FakeStreamingController
 import net.biodiscus.streammusic.testing.MainDispatcherRule
 import net.biodiscus.streammusic.testing.aDevice
@@ -30,6 +32,7 @@ class DevicesViewModelTest {
     private val streamingState = StreamingStateRepository()
     private val streamingController = FakeStreamingController()
     private val groupRepository = FakeDeviceGroupRepository()
+    private val settingsRepository = FakeSettingsRepository()
     private lateinit var viewModel: DevicesViewModel
 
     @Before
@@ -42,7 +45,56 @@ class DevicesViewModelTest {
     private val fireTv = aDevice(name = "Fire TV", protocol = DeviceProtocol.FIRE_TV, host = "10.0.0.3")
 
     private fun createViewModelWithCurrentStreamingState() =
-        DevicesViewModel(repository, streamingState, streamingController, groupRepository)
+        DevicesViewModel(repository, streamingState, streamingController, groupRepository, settingsRepository)
+
+    private val airPlay = aDevice(name = "Denon", protocol = DeviceProtocol.AIRPLAY, host = "10.0.0.5")
+    private val airPlay2 = aDevice(name = "Denon", protocol = DeviceProtocol.AIRPLAY_2, host = "10.0.0.5")
+
+    @Test
+    fun `does not list devices of a disabled protocol`() = runTest {
+        settingsRepository.setProtocolFamilyEnabled(ProtocolFamily.SONOS, isEnabled = false)
+        repository.setFoundDevices(kitchen, study)
+
+        viewModel.uiState.test {
+            val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
+            assertEquals(listOf(aNetworkDevice(study)), uiState.devices)
+        }
+    }
+
+    @Test
+    fun `lists a device again when its protocol is enabled again`() = runTest {
+        settingsRepository.setProtocolFamilyEnabled(ProtocolFamily.SONOS, isEnabled = false)
+        repository.setFoundDevices(kitchen, study)
+
+        viewModel.uiState.test {
+            expectMostRecentItem()
+
+            settingsRepository.setProtocolFamilyEnabled(ProtocolFamily.SONOS, isEnabled = true)
+
+            val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
+            assertEquals(listOf(aNetworkDevice(study), aNetworkDevice(kitchen)).toSet(), uiState.devices.toSet())
+        }
+    }
+
+    @Test
+    fun `streams with AirPlay when AirPlay 2 is switched off`() = runTest {
+        settingsRepository.setProtocolFamilyEnabled(ProtocolFamily.AIRPLAY_2, isEnabled = false)
+        repository.setFoundDevices(airPlay, airPlay2)
+
+        viewModel.uiState.test {
+            val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
+            assertEquals(airPlay, uiState.devices.single().bestStreamingOption)
+        }
+    }
+
+    @Test
+    fun `reports that single-app capture is hidden when the setting is on`() = runTest {
+        settingsRepository.setHidesSingleAppCapture(true)
+
+        viewModel.hidesSingleAppCapture.test {
+            assertEquals(true, expectMostRecentItem())
+        }
+    }
 
     @Test
     fun `is searching until a device is found`() = runTest {

@@ -275,7 +275,7 @@ class AirPlay2DeviceStreamerTest {
             repeat(frameCount) { emit(ByteArray(PcmFormat.BYTES_PER_FRAME)) }
             awaitCancellation()
         }
-        return AirPlay2DeviceStreamer(device, SessionAudio(pcmFrames, aacStreamPort = null), connector) { 1_763_000_000_000 }
+        return AirPlay2DeviceStreamer(device, SessionAudio(pcmFrames, httpStream = null), connector) { 1_763_000_000_000 }
     }
 
     private fun sharedKeyOf(streamSetup: RtspRequest): ByteArray {

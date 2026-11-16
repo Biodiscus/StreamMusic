@@ -15,6 +15,7 @@ import net.biodiscus.streammusic.core.streaming.device.airplay.RaopAudioSender
 import net.biodiscus.streammusic.core.streaming.device.airplay.RaopConnection
 import net.biodiscus.streammusic.core.streaming.device.airplay.RaopConnector
 import net.biodiscus.streammusic.core.streaming.device.airplay.RaopServerPorts
+import net.biodiscus.streammusic.core.streaming.device.airplay.airPlaySamplesDelayedBy
 import net.biodiscus.streammusic.core.streaming.device.airplay.RAOP_FIRST_SEQUENCE_NUMBER
 import net.biodiscus.streammusic.core.streaming.device.airplay.RtspRequest
 import net.biodiscus.streammusic.core.streaming.device.airplay.RtspResponse
@@ -43,6 +44,7 @@ internal class AirPlay2DeviceStreamer(
     private val device: StreamingDevice,
     private val audio: SessionAudio,
     private val connector: RaopConnector,
+    private val audioDelayMillis: Int = 0,
     private val epochMillisNow: () -> Long = System::currentTimeMillis,
 ) : DeviceStreamer {
 
@@ -69,7 +71,7 @@ internal class AirPlay2DeviceStreamer(
         val sharedKey = conversation.setUp()
         launch { connection.answerEventRequests() }
 
-        val startTimestamp = sampleNumberAt(nowNtpTime(), RAOP_SAMPLE_RATE_HZ)
+        val startTimestamp = sampleNumberAt(nowNtpTime(), RAOP_SAMPLE_RATE_HZ) + airPlaySamplesDelayedBy(audioDelayMillis)
         conversation.startRecording(startTimestamp)
         val sender = RaopAudioSender(
             connection,
@@ -78,7 +80,9 @@ internal class AirPlay2DeviceStreamer(
             AIRPLAY2_LATENCY_FRAMES,
             startTimestamp,
         )
-        streamAudioForever(connection, sender, audio, FEEDBACK_INTERVAL_MILLIS, conversation::sendFeedback, onStreaming)
+        streamAudioForever(
+            connection, sender, audio, FEEDBACK_INTERVAL_MILLIS, conversation::sendFeedback, audioDelayMillis, onStreaming,
+        )
     }
 
     private fun nowNtpTime(): Long = ntpTimeFromEpochMillis(epochMillisNow())

@@ -84,3 +84,11 @@ internal fun findIdleReason(payload: String): String? {
     val isIdle = status.optString("playerState") == "IDLE"
     return if (isIdle) status.optString("idleReason", "UNKNOWN") else null
 }
+
+/** Reads a RECEIVER_STATUS message and tells whether the Chromecast is muted. Null for any other message. */
+internal fun findMuted(payload: String): Boolean? {
+    val json = JSONObject(payload)
+    if (json.optString("type") != "RECEIVER_STATUS") return null
+    val volume = json.optJSONObject("status")?.optJSONObject("volume") ?: return null
+    return if (volume.has("muted")) volume.getBoolean("muted") else null
+}

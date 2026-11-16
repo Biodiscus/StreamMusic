@@ -18,7 +18,7 @@ internal class UpnpDeviceStreamer(
 
     override suspend fun stream(onStreaming: () -> Unit): Nothing {
         val controlUrl = checkNotNull(device.avTransportControlUrl) { "${device.name} has no AVTransport control url" }
-        val mediaUrl = playableUrlFor(device.protocol, audio.aacStreamUrlFor(device))
+        val mediaUrl = playableUrlFor(device.protocol, audio.httpStreamUrlFor(device))
         try {
             client.setAvTransportUri(controlUrl, mediaUrl)
             client.play(controlUrl)

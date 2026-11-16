@@ -16,23 +16,23 @@ private const val HEARTBEAT_INTERVAL_MILLIS = 5_000L
 private const val LAUNCH_REQUEST_ID = 1
 private const val LOAD_REQUEST_ID = 2
 private const val STOP_REQUEST_ID = 3
-private const val AAC_CONTENT_TYPE = "audio/aac"
 private val LOAD_FAILURE_TYPES = setOf("LOAD_FAILED", "LOAD_CANCELLED", "INVALID_REQUEST")
 
 /** Streams to a Chromecast by starting its built-in media player and telling it to play our HTTP stream. */
 internal class ChromecastDeviceStreamer(
     private val device: StreamingDevice,
     private val audio: SessionAudio,
+    private val disconnectsOnMute: Boolean = false,
     private val channelOpener: CastChannelOpener,
 ) : DeviceStreamer {
 
     override suspend fun stream(onStreaming: () -> Unit): Nothing {
         val channel = channelOpener.open(device.host, device.port)
-        val conversation = CastConversation(channel)
+        val conversation = CastConversation(channel, disconnectsOnMute)
         coroutineScope {
             launch(start = CoroutineStart.UNDISPATCHED) { conversation.endWhenCancelled() }
             launch { conversation.sendHeartbeatsForever() }
-            conversation.startPlaying(audio.aacStreamUrlFor(device))
+            conversation.startPlaying(audio.httpStreamUrlFor(device), audio.httpContentTypeFor(device))
             onStreaming()
             conversation.listenUntilPlaybackStops()
         }
@@ -40,12 +40,18 @@ internal class ChromecastDeviceStreamer(
 }
 
 /** The back-and-forth with one Chromecast. Each step waits for the answer it needs. */
-private class CastConversation(private val channel: CastChannel) {
+private class CastConversation(
+    private val channel: CastChannel,
+    private val disconnectsOnMute: Boolean,
+) {
 
     @Volatile
     private var launchedSessionId: String? = null
 
-    suspend fun startPlaying(streamUrl: String) {
+    /** Null until the Chromecast has told us. The first answer is the starting point, not a change. */
+    private var isMuted: Boolean? = null
+
+    suspend fun startPlaying(streamUrl: String, contentType: String) {
         send(PLATFORM_RECEIVER_ID, CastNamespace.CONNECTION, connectPayload())
         send(
             PLATFORM_RECEIVER_ID,
@@ -56,7 +62,7 @@ private class CastConversation(private val channel: CastChannel) {
         launchedSessionId = app.sessionId
 
         send(app.transportId, CastNamespace.CONNECTION, connectPayload())
-        send(app.transportId, CastNamespace.MEDIA, loadLiveAudioPayload(streamUrl, AAC_CONTENT_TYPE, LOAD_REQUEST_ID))
+        send(app.transportId, CastNamespace.MEDIA, loadLiveAudioPayload(streamUrl, contentType, LOAD_REQUEST_ID))
         waitForPlayerStatus()
     }
 
@@ -116,9 +122,19 @@ private class CastConversation(private val channel: CastChannel) {
             if (message.namespace == CastNamespace.CONNECTION && type == "CLOSE") {
                 throw IOException("Chromecast closed the connection")
             }
-            if (message.namespace != CastNamespace.HEARTBEAT) return message
+            if (message.namespace != CastNamespace.HEARTBEAT) {
+                failWhenMutedOnPurpose(message)
+                return message
+            }
             if (type == "PING") send(message.sourceId, CastNamespace.HEARTBEAT, pongPayload())
         }
+    }
+
+    private fun failWhenMutedOnPurpose(message: CastMessage) {
+        val isMutedNow = findMuted(message.payload) ?: return
+        val wasUnmuted = isMuted == false
+        isMuted = isMutedNow
+        if (disconnectsOnMute && isMutedNow && wasUnmuted) throw IOException("Chromecast was muted")
     }
 
     private suspend fun stopMediaPlayerIgnoringErrors() {

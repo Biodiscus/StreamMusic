@@ -10,8 +10,6 @@ import javax.inject.Singleton
 import net.biodiscus.streammusic.core.streaming.AudioManagerPhoneMusicVolume
 import net.biodiscus.streammusic.core.streaming.PhoneMusicVolume
 import net.biodiscus.streammusic.core.streaming.StreamingController
-import net.biodiscus.streammusic.core.streaming.aac.AacHttpStreamStarter
-import net.biodiscus.streammusic.core.streaming.aac.AacStreamStarter
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamerFactory
 import net.biodiscus.streammusic.core.streaming.device.ProtocolDeviceStreamerFactory
 import net.biodiscus.streammusic.core.streaming.device.airplay.RaopConnector
@@ -22,6 +20,8 @@ import net.biodiscus.streammusic.core.streaming.device.cast.CastChannelOpener
 import net.biodiscus.streammusic.core.streaming.device.cast.TlsCastChannelOpener
 import net.biodiscus.streammusic.core.streaming.device.upnp.AvTransportClient
 import net.biodiscus.streammusic.core.streaming.device.upnp.SoapAvTransportClient
+import net.biodiscus.streammusic.core.streaming.http.HttpAudioStreamServerStarter
+import net.biodiscus.streammusic.core.streaming.http.HttpAudioStreamStarter
 import net.biodiscus.streammusic.core.streaming.service.ServiceStreamingController
 import okhttp3.OkHttpClient
 
@@ -53,7 +53,7 @@ internal abstract class StreamingModule {
     abstract fun bindPhoneMusicVolume(volume: AudioManagerPhoneMusicVolume): PhoneMusicVolume
 
     @Binds
-    abstract fun bindAacStreamStarter(starter: AacHttpStreamStarter): AacStreamStarter
+    abstract fun bindHttpAudioStreamStarter(starter: HttpAudioStreamServerStarter): HttpAudioStreamStarter
 
     companion object {
         /** A WebSocket that stays open for a whole listening session must not time out while the audio flows. */

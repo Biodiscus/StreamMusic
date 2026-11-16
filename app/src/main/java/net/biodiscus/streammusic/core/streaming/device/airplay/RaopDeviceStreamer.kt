@@ -19,6 +19,7 @@ internal class RaopDeviceStreamer(
     private val device: StreamingDevice,
     private val audio: SessionAudio,
     private val connector: RaopConnector,
+    private val audioDelayMillis: Int = 0,
     private val epochMillisNow: () -> Long = System::currentTimeMillis,
 ) : DeviceStreamer {
 
@@ -42,11 +43,13 @@ internal class RaopDeviceStreamer(
     ): Nothing = coroutineScope {
         launch { connection.answerTimingRequests { request -> answerTimingRequest(request, nowNtpTime()) } }
 
-        val startTimestamp = sampleNumberAt(nowNtpTime(), RAOP_SAMPLE_RATE_HZ)
+        val startTimestamp = sampleNumberAt(nowNtpTime(), RAOP_SAMPLE_RATE_HZ) + airPlaySamplesDelayedBy(audioDelayMillis)
         val latencyFrames = conversation.start(startTimestamp)
         val packetEncoder = AlacAudioPacketEncoder(conversation.audioKey)
         val sender = RaopAudioSender(connection, packetEncoder, Random.nextInt(), latencyFrames, startTimestamp)
-        streamAudioForever(connection, sender, audio, KEEP_ALIVE_INTERVAL_MILLIS, conversation::keepAlive, onStreaming)
+        streamAudioForever(
+            connection, sender, audio, KEEP_ALIVE_INTERVAL_MILLIS, conversation::keepAlive, audioDelayMillis, onStreaming,
+        )
     }
 
     private fun audioKeyForDevice(): RaopAudioKey? =

@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import net.biodiscus.streammusic.core.model.DeviceProtocol
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
+import net.biodiscus.streammusic.testing.FakeHttpAudioStream
 import net.biodiscus.streammusic.testing.aDevice
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -14,7 +15,7 @@ class UpnpDeviceStreamerTest {
 
     private val client = RecordingAvTransportClient()
     private val device = aDevice(protocol = DeviceProtocol.DLNA, host = "127.0.0.1")
-    private val audio = SessionAudio(pcmFrames = emptyFlow(), aacStreamPort = 40_000)
+    private val audio = SessionAudio(pcmFrames = emptyFlow(), httpStream = FakeHttpAudioStream(port = 40_000))
 
     @Test
     fun `sets the stream address and then plays`() = runTest {

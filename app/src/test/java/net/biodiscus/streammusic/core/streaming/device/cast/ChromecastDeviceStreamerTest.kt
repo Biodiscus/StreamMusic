@@ -8,7 +8,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import net.biodiscus.streammusic.core.model.DeviceProtocol
+import net.biodiscus.streammusic.core.model.StreamAudioFormat
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
+import net.biodiscus.streammusic.testing.FakeHttpAudioStream
 import net.biodiscus.streammusic.testing.aDevice
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -20,7 +22,7 @@ class ChromecastDeviceStreamerTest {
 
     private val channel = ScriptedCastChannel()
     private val device = aDevice(protocol = DeviceProtocol.CHROMECAST, host = "127.0.0.1")
-    private val audio = SessionAudio(pcmFrames = emptyFlow(), aacStreamPort = 40_000)
+    private val audio = SessionAudio(pcmFrames = emptyFlow(), httpStream = FakeHttpAudioStream(port = 40_000))
     private val streamer = ChromecastDeviceStreamer(device, audio) { _, _ -> channel }
 
     @Test
@@ -73,6 +75,52 @@ class ChromecastDeviceStreamerTest {
         runCurrent()
 
         assertFalse(streaming)
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `loads the content type of the stream format`() = runTest {
+        val wavAudio = SessionAudio(emptyFlow(), FakeHttpAudioStream(format = StreamAudioFormat.WAV))
+        channel.receives(receiverStatusWithMediaPlayer, playingMediaStatus)
+
+        val job = launch { ChromecastDeviceStreamer(device, wavAudio) { _, _ -> channel }.stream {} }
+        runCurrent()
+
+        val media = JSONObject(channel.sentWithoutHeartbeats().last().payload).getJSONObject("media")
+        assertEquals("audio/wav", media.getString("contentType"))
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `fails when the Chromecast is muted and disconnecting on mute is on`() = runTest {
+        channel.receives(receiverStatusWithMediaPlayer, playingMediaStatus, receiverStatusWithVolume(isMuted = false), receiverStatusWithVolume(isMuted = true))
+
+        val result = runCatching { streamerThatDisconnectsOnMute().stream {} }
+
+        assertEquals("Chromecast was muted", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `keeps streaming when the Chromecast is muted and disconnecting on mute is off`() = runTest {
+        var streaming = false
+        channel.receives(receiverStatusWithMediaPlayer, playingMediaStatus, receiverStatusWithVolume(isMuted = false), receiverStatusWithVolume(isMuted = true))
+
+        val job = launch { streamer.stream { streaming = true } }
+        runCurrent()
+
+        assertTrue(streaming)
+        assertTrue(job.isActive)
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `keeps streaming when the Chromecast was already muted before streaming`() = runTest {
+        channel.receives(receiverStatusWithVolume(isMuted = true), receiverStatusWithMediaPlayer, playingMediaStatus)
+
+        val job = launch { streamerThatDisconnectsOnMute().stream {} }
+        runCurrent()
+
+        assertTrue(job.isActive)
         job.cancelAndJoin()
     }
 
@@ -138,6 +186,16 @@ class ChromecastDeviceStreamerTest {
         payload = """{"type":"RECEIVER_STATUS","status":{"applications":[
             {"appId":"CC1AD845","transportId":"web-5","sessionId":"abc-123"}]}}""",
     )
+    private fun receiverStatusWithVolume(isMuted: Boolean) = CastMessage(
+        sourceId = PLATFORM_RECEIVER_ID,
+        destinationId = SENDER_ID,
+        namespace = CastNamespace.RECEIVER,
+        payload = """{"type":"RECEIVER_STATUS","status":{"volume":{"level":0.5,"muted":$isMuted}}}""",
+    )
+
+    private fun streamerThatDisconnectsOnMute() =
+        ChromecastDeviceStreamer(device, audio, disconnectsOnMute = true) { _, _ -> channel }
+
     private val playingMediaStatus = mediaStatus("""{"playerState":"PLAYING"}""")
     private val heartbeatPing = CastMessage(PLATFORM_RECEIVER_ID, SENDER_ID, CastNamespace.HEARTBEAT, pingPayload())
     private val connectionClosed =

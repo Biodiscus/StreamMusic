@@ -87,4 +87,32 @@ class CastPayloadsTest {
 
         assertNull(findIdleReason(payload))
     }
+
+    @Test
+    fun `reads that the Chromecast is muted`() {
+        val payload = """{"type":"RECEIVER_STATUS","status":{"volume":{"level":0.4,"muted":true}}}"""
+
+        assertEquals(true, findMuted(payload))
+    }
+
+    @Test
+    fun `reads that the Chromecast is not muted`() {
+        val payload = """{"type":"RECEIVER_STATUS","status":{"volume":{"level":0.4,"muted":false}}}"""
+
+        assertEquals(false, findMuted(payload))
+    }
+
+    @Test
+    fun `a receiver status without a volume says nothing about muting`() {
+        val payload = """{"type":"RECEIVER_STATUS","status":{"applications":[]}}"""
+
+        assertNull(findMuted(payload))
+    }
+
+    @Test
+    fun `a message that is not a receiver status says nothing about muting`() {
+        val payload = """{"type":"MEDIA_STATUS","status":[{"playerState":"PLAYING"}]}"""
+
+        assertNull(findMuted(payload))
+    }
 }

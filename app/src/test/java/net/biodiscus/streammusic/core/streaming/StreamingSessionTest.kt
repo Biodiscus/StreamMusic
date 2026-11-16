@@ -16,13 +16,17 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import net.biodiscus.streammusic.core.model.DeviceProtocol
 import net.biodiscus.streammusic.core.model.DeviceStreamStatus
+import net.biodiscus.streammusic.core.model.ProtocolFamily
+import net.biodiscus.streammusic.core.model.StreamAudioFormat
 import net.biodiscus.streammusic.core.model.StreamingDevice
 import net.biodiscus.streammusic.core.model.StreamingState
-import net.biodiscus.streammusic.core.streaming.aac.AacStreamStarter
-import net.biodiscus.streammusic.core.streaming.aac.RunningAacStream
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamer
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamerFactory
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
+import net.biodiscus.streammusic.core.streaming.http.HttpAudioStreamStarter
+import net.biodiscus.streammusic.core.streaming.http.RunningHttpAudioStream
+import net.biodiscus.streammusic.testing.FakeHttpAudioStream
+import net.biodiscus.streammusic.testing.FakeSettingsRepository
 import net.biodiscus.streammusic.testing.aDevice
 import kotlin.coroutines.ContinuationInterceptor
 import org.junit.Assert.assertEquals
@@ -34,7 +38,8 @@ import org.junit.Test
 class StreamingSessionTest {
 
     private val stateRepository = StreamingStateRepository()
-    private val aacStarter = RecordingAacStreamStarter()
+    private val httpStarter = RecordingHttpAudioStreamStarter()
+    private val settings = FakeSettingsRepository()
     private val streamers = FakeStreamerFactory()
     private val phoneVolume = FakePhoneMusicVolume(level = 7)
     private lateinit var session: StreamingSession
@@ -90,7 +95,7 @@ class StreamingSessionTest {
 
         val job = startSession(kitchen)
 
-        assertEquals(1, aacStarter.startCount)
+        assertEquals(1, httpStarter.startedFormats.size)
         job.cancelAndJoin()
     }
 
@@ -100,7 +105,7 @@ class StreamingSessionTest {
 
         val job = startSession(study)
 
-        assertEquals(0, aacStarter.startCount)
+        assertEquals(0, httpStarter.startedFormats.size)
         job.cancelAndJoin()
     }
 
@@ -111,7 +116,7 @@ class StreamingSessionTest {
 
         job.cancelAndJoin()
 
-        assertTrue(aacStarter.stopped)
+        assertTrue(httpStarter.isEveryStreamStopped)
         assertEquals(StreamingState.Idle, stateRepository.state.value)
     }
 
@@ -189,7 +194,7 @@ class StreamingSessionTest {
         session.addDevice(kitchen)
         runCurrent()
 
-        assertEquals(1, aacStarter.startCount)
+        assertEquals(1, httpStarter.startedFormats.size)
         job.cancelAndJoin()
     }
 
@@ -202,7 +207,30 @@ class StreamingSessionTest {
         session.addDevice(bedroom)
         runCurrent()
 
-        assertEquals(1, aacStarter.startCount)
+        assertEquals(1, httpStarter.startedFormats.size)
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `starts a stream in the format chosen for the protocol of the device`() = runTest {
+        settings.setAudioFormat(ProtocolFamily.DLNA, StreamAudioFormat.WAV)
+        streamers.streamsSuccessfully(kitchen)
+
+        val job = startSession(kitchen)
+
+        assertEquals(listOf(StreamAudioFormat.WAV), httpStarter.startedFormats)
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `starts a separate stream for a device that needs another format`() = runTest {
+        val speaker = aDevice(name = "Speaker", protocol = DeviceProtocol.SONOS, host = "10.0.0.5")
+        settings.setAudioFormat(ProtocolFamily.SONOS, StreamAudioFormat.WAV)
+        streamers.streamsSuccessfully(kitchen, speaker)
+
+        val job = startSession(kitchen, speaker)
+
+        assertEquals(listOf(StreamAudioFormat.AAC, StreamAudioFormat.WAV), httpStarter.startedFormats)
         job.cancelAndJoin()
     }
 
@@ -264,7 +292,9 @@ class StreamingSessionTest {
         dispatcher: CoroutineDispatcher = StandardTestDispatcher(testScheduler),
     ): Job {
         val capturedPcm: Flow<ByteArray> = flow { awaitCancellation() }
-        session = StreamingSession(devices.toList(), capturedPcm, streamers, aacStarter, stateRepository, phoneVolume, dispatcher)
+        session = StreamingSession(
+            devices.toList(), capturedPcm, streamers, httpStarter, stateRepository, phoneVolume, settings, dispatcher,
+        )
         val job = launch { session.run() }
         runCurrent()
         return job
@@ -324,20 +354,19 @@ private class FakeStreamerFactory : DeviceStreamerFactory {
     }
 }
 
-private class RecordingAacStreamStarter : AacStreamStarter {
-    var startCount = 0
-        private set
-    var stopped = false
-        private set
+private class RecordingHttpAudioStreamStarter : HttpAudioStreamStarter {
+    private val startedStreams = mutableListOf<FakeHttpAudioStream>()
 
-    override fun start(scope: CoroutineScope, pcmFrames: Flow<ByteArray>): RunningAacStream {
-        startCount++
-        return object : RunningAacStream {
-            override val port = 40_000
-            override fun stop() {
-                stopped = true
-            }
-        }
+    val startedFormats: List<StreamAudioFormat>
+        get() = startedStreams.map { stream -> stream.format }
+
+    val isEveryStreamStopped: Boolean
+        get() = startedStreams.isNotEmpty() && startedStreams.all { stream -> stream.isStopped }
+
+    override fun start(scope: CoroutineScope, pcmFrames: Flow<ByteArray>, format: StreamAudioFormat): RunningHttpAudioStream {
+        val stream = FakeHttpAudioStream(format = format)
+        startedStreams += stream
+        return stream
     }
 }
 

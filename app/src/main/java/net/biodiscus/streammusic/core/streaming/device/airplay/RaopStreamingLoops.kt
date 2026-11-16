@@ -18,6 +18,7 @@ internal suspend fun streamAudioForever(
     audio: SessionAudio,
     keepAliveIntervalMillis: Long,
     keepAlive: suspend () -> Unit,
+    audioDelayMillis: Int,
     onStreaming: () -> Unit,
 ): Nothing = coroutineScope {
     launch { connection.answerControlRequests { request -> sender.retransmissionsFor(request) } }
@@ -25,7 +26,7 @@ internal suspend fun streamAudioForever(
     launch { repeatForever(keepAliveIntervalMillis, keepAlive) }
     onStreaming()
 
-    audio.pcmFrames.collect { capturedPcm -> sender.sendCapturedAudio(capturedPcm) }
+    audio.pcmFrames.delayedByMillis(audioDelayMillis).collect { capturedPcm -> sender.sendCapturedAudio(capturedPcm) }
     awaitCancellation()
 }
 

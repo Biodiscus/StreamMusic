@@ -3,6 +3,8 @@ package net.biodiscus.streammusic.feature.devices
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +26,7 @@ import net.biodiscus.streammusic.core.streaming.service.StreamingServiceCommands
  */
 @Composable
 internal fun rememberStreamStarter(
+    hidesSingleAppCapture: Boolean,
     onRecordAudioDenied: () -> Unit,
 ): (Set<String>) -> Unit {
     val context = LocalContext.current
@@ -39,7 +42,7 @@ internal fun rememberStreamStarter(
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         val canRecordAudio = grants[Manifest.permission.RECORD_AUDIO] == true
         if (canRecordAudio) {
-            projectionLauncher.launch(createScreenCaptureIntent(context))
+            projectionLauncher.launch(createScreenCaptureIntent(context, hidesSingleAppCapture))
         } else {
             onRecordAudioDenied()
         }
@@ -51,5 +54,8 @@ internal fun rememberStreamStarter(
     }
 }
 
-private fun createScreenCaptureIntent(context: Context) =
-    (context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager).createScreenCaptureIntent()
+private fun createScreenCaptureIntent(context: Context, hidesSingleAppCapture: Boolean): Intent {
+    val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+    if (!hidesSingleAppCapture) return projectionManager.createScreenCaptureIntent()
+    return projectionManager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+}

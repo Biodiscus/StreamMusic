@@ -36,6 +36,18 @@
 
     <string name="settings_title">Settings</string>
     <string name="settings_back">Back</string>
+    <string name="settings_collapse_section">Collapse</string>
+    <string name="settings_expand_section">Expand</string>
+    <string name="settings_general_header">General</string>
+    <string name="settings_hide_single_app_capture">Hide single-app capture</string>
+    <string name="settings_hide_single_app_capture_description">Only offer to share the whole screen. All audio your phone plays is streamed either way.</string>
+    <string name="settings_audio_format">Audio format</string>
+    <string name="settings_airplay_audio_delay">Audio delay</string>
+    <string name="settings_airplay_audio_delay_description">AirPlay and AirPlay 2 play %1$.1f seconds later, to line up with devices that buffer more</string>
+    <string name="settings_chromecast_disconnect_on_mute">Disconnect on mute</string>
+    <string name="settings_chromecast_disconnect_on_mute_description">Stop streaming to a Chromecast when it is muted</string>
+    <string name="settings_protocols_header">Show devices that use</string>
+    <string name="settings_troubleshooting_header">Troubleshooting</string>
     <string name="settings_discovery_debug">Discovery debug view</string>
     <string name="settings_discovery_debug_description">Everything the network search found, one entry per protocol</string>
 
