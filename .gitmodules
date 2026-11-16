@@ -1,0 +1,3 @@
+[submodule ".claude/skills/claude-android-skill"]
+	path = .claude/skills/claude-android-skill
+	url = https://github.com/dpconde/claude-android-skill.git
