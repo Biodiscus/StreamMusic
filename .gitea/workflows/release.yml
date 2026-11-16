@@ -28,8 +28,8 @@ jobs:
           java-version: 21
 
       - uses: android-actions/setup-android@v3
-
-      - uses: gradle/actions/setup-gradle@v4
+        with:
+          packages: ''
 
       - name: Restore the release keystore
         run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > "$RELEASE_KEYSTORE_PATH"
