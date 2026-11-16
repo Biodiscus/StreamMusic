@@ -36,6 +36,19 @@
 
     <string name="settings_title">Settings</string>
     <string name="settings_back">Back</string>
+    <string name="settings_discovery_debug">Discovery debug view</string>
+    <string name="settings_discovery_debug_description">Everything the network search found, one entry per protocol</string>
+
+    <string name="debug_title">Discovery debug</string>
+    <string name="debug_searching">Searching… nothing found yet</string>
+    <string name="debug_find_count">%1$d of %2$d finds shown</string>
+    <string name="debug_filter_all">All</string>
+    <string name="debug_implemented">Implemented</string>
+    <string name="debug_not_implemented">Not implemented</string>
+    <string name="debug_transport">Transport: %1$s</string>
+    <string name="debug_address">Address: %1$s:%2$d</string>
+    <string name="debug_id">Id: %1$s</string>
+    <string name="debug_control_url">AVTransport control URL: %1$s</string>
 
     <string name="devices_stop">Stop streaming</string>
     <string name="devices_status_connecting">Connecting…</string>
