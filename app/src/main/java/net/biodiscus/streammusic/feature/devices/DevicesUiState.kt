@@ -1,6 +1,6 @@
 package net.biodiscus.streammusic.feature.devices
 
-import net.biodiscus.streammusic.core.model.StreamingDevice
+import net.biodiscus.streammusic.core.model.NetworkDevice
 
 internal sealed interface DevicesUiState {
 
@@ -8,10 +8,17 @@ internal sealed interface DevicesUiState {
     data object Searching : DevicesUiState
 
     data class DevicesFound(
-        val devices: List<StreamingDevice>,
+        val devices: List<NetworkDevice>,
         val selectedDeviceIds: Set<String>,
     ) : DevicesUiState {
         val selectedCount: Int = selectedDeviceIds.size
+
+        /** The ids of the streaming options to start: one per selected device, using its best protocol. */
+        val selectedStreamingDeviceIds: Set<String> =
+            devices
+                .filter { device -> device.id in selectedDeviceIds }
+                .mapNotNull { device -> device.bestStreamingOption?.id }
+                .toSet()
     }
 }
 

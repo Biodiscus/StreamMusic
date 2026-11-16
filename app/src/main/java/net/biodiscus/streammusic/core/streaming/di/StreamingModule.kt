@@ -7,6 +7,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+import net.biodiscus.streammusic.core.streaming.AudioManagerPhoneMusicVolume
+import net.biodiscus.streammusic.core.streaming.PhoneMusicVolume
 import net.biodiscus.streammusic.core.streaming.aac.AacHttpStreamStarter
 import net.biodiscus.streammusic.core.streaming.aac.AacStreamStarter
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamerFactory
@@ -36,6 +38,9 @@ internal abstract class StreamingModule {
 
     @Binds
     abstract fun bindDeviceStreamerFactory(factory: ProtocolDeviceStreamerFactory): DeviceStreamerFactory
+
+    @Binds
+    abstract fun bindPhoneMusicVolume(volume: AudioManagerPhoneMusicVolume): PhoneMusicVolume
 
     @Binds
     abstract fun bindAacStreamStarter(starter: AacHttpStreamStarter): AacStreamStarter

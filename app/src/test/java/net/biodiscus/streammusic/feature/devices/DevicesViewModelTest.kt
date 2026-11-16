@@ -5,6 +5,7 @@ import net.biodiscus.streammusic.core.model.DeviceProtocol
 import net.biodiscus.streammusic.testing.FakeDeviceRepository
 import net.biodiscus.streammusic.testing.MainDispatcherRule
 import net.biodiscus.streammusic.testing.aDevice
+import net.biodiscus.streammusic.testing.aNetworkDevice
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -41,7 +42,7 @@ class DevicesViewModelTest {
 
             repository.setFoundDevices(kitchen, homePod)
 
-            assertEquals(DevicesUiState.DevicesFound(listOf(kitchen, homePod), emptySet()), awaitItem())
+            assertEquals(DevicesUiState.DevicesFound(listOf(aNetworkDevice(homePod), aNetworkDevice(kitchen)), emptySet()), awaitItem())
         }
     }
 
@@ -51,9 +52,9 @@ class DevicesViewModelTest {
         viewModel.uiState.test {
             awaitItem()
 
-            viewModel.onDeviceClicked(kitchen)
+            viewModel.onDeviceClicked(aNetworkDevice(kitchen))
 
-            assertEquals(setOf(kitchen.id), (expectMostRecentItem() as DevicesUiState.DevicesFound).selectedDeviceIds)
+            assertEquals(setOf(kitchen.host), (expectMostRecentItem() as DevicesUiState.DevicesFound).selectedDeviceIds)
         }
     }
 
@@ -62,9 +63,9 @@ class DevicesViewModelTest {
         repository.setFoundDevices(kitchen)
         viewModel.uiState.test {
             awaitItem()
-            viewModel.onDeviceClicked(kitchen)
+            viewModel.onDeviceClicked(aNetworkDevice(kitchen))
 
-            viewModel.onDeviceClicked(kitchen)
+            viewModel.onDeviceClicked(aNetworkDevice(kitchen))
 
             assertEquals(emptySet<String>(), (expectMostRecentItem() as DevicesUiState.DevicesFound).selectedDeviceIds)
         }
@@ -77,10 +78,10 @@ class DevicesViewModelTest {
         viewModel.uiState.test {
             awaitItem()
 
-            viewModel.onDeviceClicked(kitchen)
-            viewModel.onDeviceClicked(study)
+            viewModel.onDeviceClicked(aNetworkDevice(kitchen))
+            viewModel.onDeviceClicked(aNetworkDevice(study))
 
-            assertEquals(setOf(kitchen.id, study.id), (expectMostRecentItem() as DevicesUiState.DevicesFound).selectedDeviceIds)
+            assertEquals(setOf(kitchen.host, study.host), (expectMostRecentItem() as DevicesUiState.DevicesFound).selectedDeviceIds)
         }
     }
 
@@ -90,7 +91,7 @@ class DevicesViewModelTest {
         viewModel.uiState.test {
             awaitItem()
 
-            viewModel.onDeviceClicked(homePod)
+            viewModel.onDeviceClicked(aNetworkDevice(homePod))
 
             val uiState = viewModel.uiState.value as DevicesUiState.DevicesFound
             assertEquals(emptySet<String>(), uiState.selectedDeviceIds)
@@ -102,13 +103,26 @@ class DevicesViewModelTest {
         repository.setFoundDevices(kitchen)
         viewModel.uiState.test {
             awaitItem()
-            viewModel.onDeviceClicked(kitchen)
+            viewModel.onDeviceClicked(aNetworkDevice(kitchen))
 
             viewModel.onRefreshClicked()
 
             assertEquals(1, repository.forgetAllCount)
             assertEquals(2, repository.observeCount)
             assertEquals(DevicesUiState.Searching, expectMostRecentItem())
+        }
+    }
+
+    @Test
+    fun `lists a device that speaks several protocols once`() = runTest {
+        val kitchenDlna = aDevice(name = "Kitchen DLNA", protocol = DeviceProtocol.DLNA, host = kitchen.host)
+        viewModel.uiState.test {
+            awaitItem()
+
+            repository.setFoundDevices(kitchen, kitchenDlna)
+
+            val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
+            assertEquals(listOf(aNetworkDevice(kitchen, kitchenDlna)), uiState.devices)
         }
     }
 }

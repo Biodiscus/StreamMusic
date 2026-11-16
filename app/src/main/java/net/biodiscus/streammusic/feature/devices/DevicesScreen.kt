@@ -40,7 +40,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import net.biodiscus.streammusic.R
 import net.biodiscus.streammusic.core.model.DeviceProtocol
+import net.biodiscus.streammusic.core.model.NetworkDevice
 import net.biodiscus.streammusic.core.model.StreamingDevice
+import net.biodiscus.streammusic.core.model.groupIntoNetworkDevices
 import net.biodiscus.streammusic.ui.ThemePreviews
 import net.biodiscus.streammusic.ui.theme.StreamMusicTheme
 
@@ -103,7 +105,7 @@ internal fun LocalNetworkPermissionScreen(
 internal fun DevicesScreen(
     uiState: DevicesUiState,
     snackbarHostState: SnackbarHostState,
-    onDeviceClicked: (StreamingDevice) -> Unit,
+    onDeviceClicked: (NetworkDevice) -> Unit,
     onRefreshClicked: () -> Unit,
     onContinueClicked: (Set<String>) -> Unit,
     modifier: Modifier = Modifier,
@@ -123,7 +125,7 @@ internal fun DevicesScreen(
         },
         floatingActionButton = {
             if (uiState is DevicesUiState.DevicesFound && uiState.selectedCount > 0) {
-                ExtendedFloatingActionButton(onClick = { onContinueClicked(uiState.selectedDeviceIds) }) {
+                ExtendedFloatingActionButton(onClick = { onContinueClicked(uiState.selectedStreamingDeviceIds) }) {
                     Text(pluralStringResource(R.plurals.devices_continue, uiState.selectedCount, uiState.selectedCount))
                 }
             }
@@ -151,7 +153,7 @@ private fun SearchingIndicator() {
 @Composable
 private fun DeviceList(
     uiState: DevicesUiState.DevicesFound,
-    onDeviceClicked: (StreamingDevice) -> Unit,
+    onDeviceClicked: (NetworkDevice) -> Unit,
 ) {
     LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
         items(items = uiState.devices, key = { device -> device.id }) { device ->
@@ -166,7 +168,7 @@ private fun DeviceList(
 
 @Composable
 internal fun DeviceRow(
-    device: StreamingDevice,
+    device: NetworkDevice,
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -183,8 +185,9 @@ internal fun DeviceRow(
 }
 
 @Composable
-private fun deviceDescription(device: StreamingDevice): String {
-    val protocolAndAddress = "${device.protocol.displayName} · ${device.host}"
+private fun deviceDescription(device: NetworkDevice): String {
+    val protocolNames = device.protocols.joinToString(" · ") { protocol -> protocol.displayName }
+    val protocolAndAddress = "$protocolNames · ${device.host}"
     return if (device.canReceiveStream) {
         protocolAndAddress
     } else {
@@ -199,8 +202,8 @@ private fun DevicesScreenPreview() {
         DevicesScreen(
             snackbarHostState = remember { SnackbarHostState() },
             uiState = DevicesUiState.DevicesFound(
-                devices = previewDevices,
-                selectedDeviceIds = setOf(previewDevices.first().id),
+                devices = previewDevices.groupIntoNetworkDevices(),
+                selectedDeviceIds = setOf("192.168.1.20"),
             ),
             onDeviceClicked = {},
             onRefreshClicked = {},
@@ -211,6 +214,7 @@ private fun DevicesScreenPreview() {
 
 private val previewDevices = listOf(
     StreamingDevice("Kitchen", DeviceProtocol.SONOS, "192.168.1.20", 1400),
+    StreamingDevice("Kitchen", DeviceProtocol.DLNA, "192.168.1.20", 1400),
     StreamingDevice("Living room TV", DeviceProtocol.CHROMECAST, "192.168.1.30", 8009),
     StreamingDevice("HomePod", DeviceProtocol.AIRPLAY, "192.168.1.40", 7000),
 )

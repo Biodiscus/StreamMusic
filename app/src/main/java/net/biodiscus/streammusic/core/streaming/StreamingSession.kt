@@ -29,14 +29,18 @@ internal class StreamingSessionFactory @Inject constructor(
     private val streamerFactory: DeviceStreamerFactory,
     private val aacStreamStarter: AacStreamStarter,
     private val stateRepository: StreamingStateRepository,
+    private val phoneMusicVolume: PhoneMusicVolume,
 ) {
-    fun create(devices: List<StreamingDevice>, capturedPcm: Flow<ByteArray>) =
-        StreamingSession(devices, capturedPcm, streamerFactory, aacStreamStarter, stateRepository, Dispatchers.IO)
+    fun create(devices: List<StreamingDevice>, capturedPcm: Flow<ByteArray>) = StreamingSession(
+        devices, capturedPcm, streamerFactory, aacStreamStarter, stateRepository, phoneMusicVolume, Dispatchers.IO,
+    )
 }
 
 /**
  * Sends one captured audio stream to several devices at once.
  * A device that fails is marked as failed and does not affect the other devices.
+ * The phone itself is silent while the session runs, so the user can watch other content. The volume the
+ * user had comes back when the session ends.
  */
 internal class StreamingSession(
     private val devices: List<StreamingDevice>,
@@ -44,6 +48,7 @@ internal class StreamingSession(
     private val streamerFactory: DeviceStreamerFactory,
     private val aacStreamStarter: AacStreamStarter,
     private val stateRepository: StreamingStateRepository,
+    private val phoneMusicVolume: PhoneMusicVolume,
     private val dispatcher: CoroutineDispatcher,
 ) {
 
@@ -62,12 +67,20 @@ internal class StreamingSession(
 
         devices.forEach { device -> launch { streamToDevice(device, audio) } }
 
+        val volumeBeforeStreaming = silencePhone()
         try {
             awaitCancellation()
         } finally {
+            phoneMusicVolume.level = volumeBeforeStreaming
             aacStream?.stop()
             stateRepository.streamingEnded()
         }
+    }
+
+    private fun silencePhone(): Int {
+        val volumeBeforeStreaming = phoneMusicVolume.level
+        phoneMusicVolume.level = SILENT_VOLUME_LEVEL
+        return volumeBeforeStreaming
     }
 
     /** Slow listeners lose their oldest frames instead of holding up the recording. */

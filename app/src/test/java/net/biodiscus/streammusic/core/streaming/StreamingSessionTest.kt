@@ -36,6 +36,7 @@ class StreamingSessionTest {
     private val stateRepository = StreamingStateRepository()
     private val aacStarter = RecordingAacStreamStarter()
     private val streamers = FakeStreamerFactory()
+    private val phoneVolume = FakePhoneMusicVolume(level = 7)
 
     private val kitchen = aDevice(name = "Kitchen", protocol = DeviceProtocol.DLNA, host = "10.0.0.2")
     private val study = aDevice(name = "Study", protocol = DeviceProtocol.ARIACAST, host = "10.0.0.3")
@@ -134,12 +135,32 @@ class StreamingSessionTest {
         job.cancelAndJoin()
     }
 
+    @Test
+    fun `silences the phone while streaming`() = runTest {
+        streamers.streamsSuccessfully(kitchen)
+
+        val job = startSession(kitchen)
+
+        assertEquals(SILENT_VOLUME_LEVEL, phoneVolume.level)
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `gives the phone its volume back when the session ends`() = runTest {
+        streamers.streamsSuccessfully(kitchen)
+        val job = startSession(kitchen)
+
+        job.cancelAndJoin()
+
+        assertEquals(7, phoneVolume.level)
+    }
+
     private fun TestScope.startSession(
         vararg devices: StreamingDevice,
         dispatcher: CoroutineDispatcher = StandardTestDispatcher(testScheduler),
     ): Job {
         val capturedPcm: Flow<ByteArray> = flow { awaitCancellation() }
-        val session = StreamingSession(devices.toList(), capturedPcm, streamers, aacStarter, stateRepository, dispatcher)
+        val session = StreamingSession(devices.toList(), capturedPcm, streamers, aacStarter, stateRepository, phoneVolume, dispatcher)
         val job = launch { session.run() }
         runCurrent()
         return job
@@ -204,3 +225,5 @@ private class RecordingAacStreamStarter : AacStreamStarter {
         }
     }
 }
+
+private class FakePhoneMusicVolume(override var level: Int) : PhoneMusicVolume

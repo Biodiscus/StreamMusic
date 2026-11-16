@@ -1,6 +1,7 @@
 package net.biodiscus.streammusic.testing
 
 import net.biodiscus.streammusic.core.model.DeviceProtocol
+import net.biodiscus.streammusic.core.model.NetworkDevice
 import net.biodiscus.streammusic.core.model.StreamingDevice
 
 fun aDevice(
@@ -14,3 +15,5 @@ fun aDevice(
     port = 80,
     avTransportControlUrl = "http://$host/control",
 )
+
+fun aNetworkDevice(vararg options: StreamingDevice) = NetworkDevice(host = options.first().host, options = options.toList())

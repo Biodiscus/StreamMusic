@@ -1,5 +1,8 @@
 package net.biodiscus.streammusic.feature.devices
 
+import net.biodiscus.streammusic.core.model.DeviceProtocol
+import net.biodiscus.streammusic.testing.aDevice
+import net.biodiscus.streammusic.testing.aNetworkDevice
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -13,5 +16,21 @@ class DevicesUiStateTest {
     @Test
     fun `selecting a selected device removes it`() {
         assertEquals(setOf("a"), toggleSelection(setOf("a", "b"), "b"))
+    }
+
+    @Test
+    fun `a selected device is streamed to with its best protocol`() {
+        val dlna = aDevice(protocol = DeviceProtocol.DLNA, host = "10.0.0.2")
+        val chromecast = aDevice(protocol = DeviceProtocol.CHROMECAST, host = "10.0.0.2")
+        val uiState = DevicesUiState.DevicesFound(listOf(aNetworkDevice(dlna, chromecast)), setOf("10.0.0.2"))
+
+        assertEquals(setOf(chromecast.id), uiState.selectedStreamingDeviceIds)
+    }
+
+    @Test
+    fun `a device that is not selected is not streamed to`() {
+        val uiState = DevicesUiState.DevicesFound(listOf(aNetworkDevice(aDevice())), emptySet())
+
+        assertEquals(emptySet<String>(), uiState.selectedStreamingDeviceIds)
     }
 }

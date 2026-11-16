@@ -38,7 +38,7 @@ The project's own files win over the skill where they differ:
 Each top-level package is shaped like a module of the skill. Keep the dependency direction: `feature` -> `core`, never the other way around, and never between two features.
 
 ```
-core/model/       Pure Kotlin data: StreamingDevice, DeviceProtocol, StreamTransport, StreamingState.
+core/model/       Pure Kotlin data: StreamingDevice, NetworkDevice, DeviceProtocol, StreamTransport, StreamingState.
                   Depends on nothing.
 core/discovery/   Finding devices.
   ssdp/           SSDP multicast search (UPnP, DLNA, Sonos, HEOS, Samsung Multiroom). Message building/parsing.
@@ -83,7 +83,7 @@ The AAC stream is only started when at least one chosen device pulls an HTTP str
 | AriaCast | mDNS `_audiocast._tcp` | WebSocket `ws://<host>:12889/audio`, raw PCM. The port is the documented default, not read from mDNS. |
 | AirPlay, Fire TV, Spotify Connect, Bose SoundTouch | mDNS | **Not supported.** They are listed with a "found, but not supported" label and cannot be selected. |
 
-A device that is reachable by two methods (for example AirPlay announces `_airplay` and `_raop`) is one entry, because `StreamingDevice.id` is `protocol@host`.
+A device that is reachable by two methods of the same protocol (for example AirPlay announces `_airplay` and `_raop`) is one `StreamingDevice`, because its `id` is `protocol@host`. A device that speaks several protocols (a TV that is both Chromecast and DLNA) is found once per protocol. The Devices screen joins those finds by host into one `NetworkDevice`, and streams with its most preferred supported protocol (`STREAMING_PREFERENCE` in `NetworkDevice.kt`).
 
 ### Contracts that matter
 
@@ -97,7 +97,7 @@ A device that is reachable by two methods (for example AirPlay announces `_airpl
 
 - **A new UPnP-like brand:** add a branch to `classifyUpnpDevice` (+ test). It streams automatically through the UPnP streamer.
 - **A new mDNS device type:** add a row to `MDNS_SERVICE_KINDS` and, if its name needs cleaning, to `friendlyMdnsName` (+ test). Add the enum entry in `DeviceProtocol` with `NOT_SUPPORTED`.
-- **Streaming to a new protocol:** add a `DeviceProtocol` entry with its `StreamTransport`, write a `DeviceStreamer` that follows the contract above, add it to `ProtocolDeviceStreamerFactory`, and write its tests with a hand-written fake of its connection (see `ChromecastDeviceStreamerTest`).
+- **Streaming to a new protocol:** add a `DeviceProtocol` entry with its `StreamTransport`, write a `DeviceStreamer` that follows the contract above, add it to `ProtocolDeviceStreamerFactory` and to `STREAMING_PREFERENCE`, and write its tests with a hand-written fake of its connection (see `ChromecastDeviceStreamerTest`).
 
 ### Known limits
 

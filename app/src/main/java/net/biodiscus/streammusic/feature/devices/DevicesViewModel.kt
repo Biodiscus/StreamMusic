@@ -13,7 +13,9 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import net.biodiscus.streammusic.core.discovery.DeviceRepository
+import net.biodiscus.streammusic.core.model.NetworkDevice
 import net.biodiscus.streammusic.core.model.StreamingDevice
+import net.biodiscus.streammusic.core.model.groupIntoNetworkDevices
 
 private const val STOP_TIMEOUT_MILLIS = 5_000L
 
@@ -33,7 +35,7 @@ internal class DevicesViewModel @Inject constructor(
                 initialValue = DevicesUiState.Searching,
             )
 
-    fun onDeviceClicked(device: StreamingDevice) {
+    fun onDeviceClicked(device: NetworkDevice) {
         if (!device.canReceiveStream) return
         selectedDeviceIds.update { selected -> toggleSelection(selected, device.id) }
     }
@@ -52,6 +54,6 @@ internal class DevicesViewModel @Inject constructor(
         if (devices.isEmpty()) {
             DevicesUiState.Searching
         } else {
-            DevicesUiState.DevicesFound(devices, selectedIds)
+            DevicesUiState.DevicesFound(devices.groupIntoNetworkDevices(), selectedIds)
         }
 }
