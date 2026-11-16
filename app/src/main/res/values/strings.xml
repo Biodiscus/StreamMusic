@@ -7,7 +7,6 @@
 
     <string name="devices_settings">Settings</string>
     <string name="devices_search_again">Search again</string>
-    <string name="devices_searching">Searching your network…</string>
     <string name="devices_discovery_only">Found, but streaming to it is not supported yet</string>
     <plurals name="devices_continue">
         <item quantity="one">Stream to %1$d device</item>

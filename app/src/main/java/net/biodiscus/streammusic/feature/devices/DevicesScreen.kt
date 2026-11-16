@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,7 +25,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -150,7 +148,6 @@ internal fun DevicesScreen(
         floatingActionButton = { StreamingButton(uiState, onContinueClicked, onStopClicked) },
     ) { contentPadding ->
         Column(Modifier.padding(contentPadding)) {
-            SearchingIndicator()
             if (uiState is DevicesUiState.DevicesFound) {
                 DeviceList(uiState, onDeviceClicked, onChooseProtocolClicked = { device -> protocolChoiceDeviceId = device.id })
             }
@@ -188,16 +185,6 @@ private fun StreamingButton(
             Text(pluralStringResource(R.plurals.devices_continue, uiState.selectedCount, uiState.selectedCount))
         }
     }
-}
-
-@Composable
-private fun SearchingIndicator() {
-    LinearProgressIndicator(Modifier.fillMaxWidth())
-    Text(
-        text = stringResource(R.string.devices_searching),
-        style = MaterialTheme.typography.bodySmall,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-    )
 }
 
 @Composable
