@@ -1,7 +1,9 @@
 package net.biodiscus.streammusic.feature.devices
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,15 +12,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.DevicesOther
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
@@ -26,10 +32,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -48,6 +55,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -180,6 +190,7 @@ internal fun DevicesScreen(
         },
     ) { contentPadding ->
         Column(Modifier.padding(contentPadding)) {
+            if (uiState is DevicesUiState.Searching) SearchingPlaceholder()
             if (uiState is DevicesUiState.DevicesFound) {
                 DeviceList(
                     uiState = uiState,
@@ -282,14 +293,43 @@ private fun StreamingButton(
     onStopClicked: () -> Unit,
 ) {
     if (uiState.isStreaming) {
-        FloatingActionButton(onClick = onStopClicked) {
-            Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.devices_stop))
-        }
+        ExtendedFloatingActionButton(
+            onClick = onStopClicked,
+            icon = { Icon(Icons.Filled.Stop, contentDescription = null) },
+            text = { Text(stringResource(R.string.devices_stop)) },
+        )
     } else if (uiState is DevicesUiState.DevicesFound && uiState.selectedCount > 0) {
-        FloatingActionButton(onClick = { onContinueClicked(uiState.selectedStreamingDeviceIds) }) {
-            val description = pluralStringResource(R.plurals.devices_continue, uiState.selectedCount, uiState.selectedCount)
-            Icon(Icons.Filled.PlayArrow, contentDescription = description)
-        }
+        ExtendedFloatingActionButton(
+            onClick = { onContinueClicked(uiState.selectedStreamingDeviceIds) },
+            icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+            text = { Text(pluralStringResource(R.plurals.devices_continue, uiState.selectedCount, uiState.selectedCount)) },
+        )
+    }
+}
+
+@Composable
+private fun SearchingPlaceholder() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CircularProgressIndicator()
+        Spacer(Modifier.size(24.dp))
+        Text(
+            text = stringResource(R.string.devices_searching_title),
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.size(8.dp))
+        Text(
+            text = stringResource(R.string.devices_searching_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -302,7 +342,10 @@ private fun DeviceList(
     onEditGroupClicked: (DeviceGroup) -> Unit,
     onDeleteGroupClicked: (DeviceGroup) -> Unit,
 ) {
-    LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
+    LazyColumn(
+        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
         if (uiState.showsGroups) {
             item(key = "groups-header") { SectionHeader(stringResource(R.string.devices_groups_header)) }
             items(items = uiState.groups, key = { group -> "group-${group.name}" }) { group ->
@@ -336,7 +379,7 @@ private fun SectionHeader(text: String) {
         text = text,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
     )
 }
 
@@ -350,11 +393,14 @@ internal fun DeviceRow(
     onChooseProtocolClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val rowModifier = if (device.canReceiveStream) modifier.clickable(onClick = onClick) else modifier
+    val clickableModifier = if (device.canReceiveStream) Modifier.clickable(onClick = onClick) else Modifier
+    val containerColor = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
     ListItem(
-        modifier = rowModifier,
+        modifier = modifier.clip(RoundedCornerShape(16.dp)).then(clickableModifier),
+        colors = ListItemDefaults.colors(containerColor = containerColor),
+        leadingContent = { DeviceIcon(device, isSelected) },
         headlineContent = { Text(device.name) },
-        supportingContent = { Text(deviceDescription(device, protocolInUse, streamStatus)) },
+        supportingContent = { DeviceDetails(device, protocolInUse, streamStatus) },
         trailingContent = {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -373,18 +419,53 @@ internal fun DeviceRow(
 }
 
 @Composable
-private fun deviceDescription(
+private fun DeviceIcon(device: NetworkDevice, isSelected: Boolean) {
+    val circleColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val iconColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    val icon = if (device.canReceiveStream) Icons.Filled.Speaker else Icons.Filled.DevicesOther
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(circleColor),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = iconColor)
+    }
+}
+
+@Composable
+private fun DeviceDetails(
     device: NetworkDevice,
     protocolInUse: DeviceProtocol?,
     streamStatus: DeviceStreamStatus?,
-): String {
-    if (protocolInUse != null && streamStatus != null) {
-        return "${protocolInUse.displayName} · ${device.host}\n${streamStatusText(streamStatus)}"
+) {
+    Column {
+        Text(deviceSubtitle(device, protocolInUse))
+        if (streamStatus != null) {
+            Text(streamStatusText(streamStatus), color = streamStatusColor(streamStatus))
+        } else if (!device.canReceiveStream) {
+            Text(stringResource(R.string.devices_discovery_only))
+        }
     }
-    if (protocolInUse != null) return "${protocolInUse.displayName} · ${device.host}"
-    val protocolNames = device.protocols.joinToString(" · ") { protocol -> protocol.displayName }
-    return "$protocolNames · ${device.host}\n${stringResource(R.string.devices_discovery_only)}"
 }
+
+private fun deviceSubtitle(device: NetworkDevice, protocolInUse: DeviceProtocol?): String {
+    val protocolNames = if (protocolInUse != null) {
+        protocolInUse.displayName
+    } else {
+        device.protocols.joinToString(" · ") { protocol -> protocol.displayName }
+    }
+    return "$protocolNames · ${device.host}"
+}
+
+@Composable
+private fun streamStatusColor(status: DeviceStreamStatus): Color =
+    when (status) {
+        DeviceStreamStatus.Connecting -> MaterialTheme.colorScheme.onSurfaceVariant
+        DeviceStreamStatus.Streaming -> MaterialTheme.colorScheme.primary
+        is DeviceStreamStatus.Failed -> MaterialTheme.colorScheme.error
+    }
 
 @Composable
 private fun streamStatusText(status: DeviceStreamStatus): String =
@@ -441,6 +522,27 @@ private fun DevicesScreenPreview() {
                 selectedDeviceIds = setOf("192.168.1.20", "192.168.1.30"),
                 groups = listOf(previewGroup),
             ),
+            onDeviceClicked = {},
+            onProtocolChosen = { _, _ -> },
+            onSaveGroupClicked = { _, _, _ -> },
+            onGroupEdited = { _, _, _, _ -> },
+            onDeleteGroupClicked = {},
+            onGroupClicked = { _, _ -> },
+            onRefreshClicked = {},
+            onSettingsClicked = {},
+            onContinueClicked = {},
+            onStopClicked = {},
+        )
+    }
+}
+
+@ThemePreviews
+@Composable
+private fun DevicesScreenSearchingPreview() {
+    StreamMusicTheme {
+        DevicesScreen(
+            snackbarHostState = remember { SnackbarHostState() },
+            uiState = DevicesUiState.Searching(),
             onDeviceClicked = {},
             onProtocolChosen = { _, _ -> },
             onSaveGroupClicked = { _, _, _ -> },

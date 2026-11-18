@@ -8,6 +8,6 @@
 
 - [ ] Publish the app!
 
-- [ ] Improve the design a bit?
+- [X] Improve the design a bit?
 
 - [X] Get more settings for all the providers and set them in the config
