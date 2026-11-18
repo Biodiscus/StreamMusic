@@ -6,11 +6,13 @@ Stream your phone's audio to several speakers and TVs on your Wi-Fi at once. No 
   <img src="docs/screenshots/devices-light.png" width="200" alt="Devices found on the network and a saved group">
   <img src="docs/screenshots/devices-selected-light.png" width="200" alt="Two devices ticked, ready to stream">
   <img src="docs/screenshots/choose-protocol-light.png" width="200" alt="Choosing the protocol for a TV that speaks two">
+  <img src="docs/screenshots/streaming-light.png" width="200" alt="Streaming to two devices">
 </p>
 <p>
   <img src="docs/screenshots/devices-dark.png" width="200" alt="Devices found on the network and a saved group, dark theme">
   <img src="docs/screenshots/devices-selected-dark.png" width="200" alt="Two devices ticked, ready to stream, dark theme">
   <img src="docs/screenshots/choose-protocol-dark.png" width="200" alt="Choosing the protocol for a TV that speaks two, dark theme">
+  <img src="docs/screenshots/streaming-dark.png" width="200" alt="Streaming to two devices, dark theme">
 </p>
 
 ## Why
