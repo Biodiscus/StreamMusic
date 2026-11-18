@@ -16,18 +16,23 @@ import net.biodiscus.streammusic.core.model.RaopServiceInfo
 import net.biodiscus.streammusic.core.streaming.PcmFormat
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
 import net.biodiscus.streammusic.core.streaming.device.airplay.FakeRaopConnection
+import net.biodiscus.streammusic.core.streaming.device.airplay.RAOP_SAMPLE_RATE_HZ
 import net.biodiscus.streammusic.core.streaming.device.airplay.RaopConnector
 import net.biodiscus.streammusic.core.streaming.device.airplay.RaopServerPorts
 import net.biodiscus.streammusic.core.streaming.device.airplay.RtspRequest
 import net.biodiscus.streammusic.core.streaming.device.airplay.RtspResponse
 import net.biodiscus.streammusic.core.streaming.device.airplay.nonceFromCounter
+import net.biodiscus.streammusic.core.streaming.device.airplay.ntpTimeFromEpochMillis
 import net.biodiscus.streammusic.core.streaming.device.airplay.openWithChaCha20Poly1305
+import net.biodiscus.streammusic.core.streaming.device.airplay.sampleNumberAt
 import net.biodiscus.streammusic.testing.aDevice
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+
+private const val CLOCK_EPOCH_MILLIS = 1_763_000_000_000
 
 class AirPlay2DeviceStreamerTest {
 
@@ -264,18 +269,33 @@ class AirPlay2DeviceStreamerTest {
         assertTrue(result.exceptionOrNull() is IOException)
     }
 
-    private fun TestScope.startStreaming(frameCount: Int, onStreaming: () -> Unit = {}): Job {
-        val job = launch { streamerFor(frameCount).stream(onStreaming) }
+    @Test
+    fun `starts the timeline one second later for an audio delay of one second`() = runTest {
+        val startWithoutDelay = sampleNumberAt(ntpTimeFromEpochMillis(CLOCK_EPOCH_MILLIS), RAOP_SAMPLE_RATE_HZ)
+
+        val job = startStreaming(frameCount = 0, audioDelayMillis = 1_000)
+
+        assertEquals((startWithoutDelay + 44_100).toInt().toUInt().toLong(), flushRtpTime())
+        job.cancelAndJoin()
+    }
+
+    private fun flushRtpTime(): Long {
+        val flush = receiver.requests.first { request -> request.method == "FLUSH" }
+        return flush.headers.getValue("RTP-Info").substringAfter("rtptime=").toLong()
+    }
+
+    private fun TestScope.startStreaming(frameCount: Int, audioDelayMillis: Int = 0, onStreaming: () -> Unit = {}): Job {
+        val job = launch { streamerFor(frameCount, audioDelayMillis).stream(onStreaming) }
         runCurrent()
         return job
     }
 
-    private fun streamerFor(frameCount: Int): AirPlay2DeviceStreamer {
+    private fun streamerFor(frameCount: Int, audioDelayMillis: Int = 0): AirPlay2DeviceStreamer {
         val pcmFrames = flow {
             repeat(frameCount) { emit(ByteArray(PcmFormat.BYTES_PER_FRAME)) }
             awaitCancellation()
         }
-        return AirPlay2DeviceStreamer(device, SessionAudio(pcmFrames, httpStream = null), connector) { 1_763_000_000_000 }
+        return AirPlay2DeviceStreamer(device, SessionAudio(pcmFrames, httpStream = null), connector, audioDelayMillis) { CLOCK_EPOCH_MILLIS }
     }
 
     private fun sharedKeyOf(streamSetup: RtspRequest): ByteArray {

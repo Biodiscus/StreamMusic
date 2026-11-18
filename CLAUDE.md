@@ -56,7 +56,7 @@ core/groups/      Saved device groups (SharedPreferences + JSON). A group is a n
                   Clicking one on the Devices screen selects its devices that are on the network and starts streaming.
 core/protocolchoices/  The protocol the user picked per device in the protocol dialog (SharedPreferences + JSON), loaded when the Devices screen starts.
                   Choices made through a group are not saved.
-core/settings/    App settings (SharedPreferences): which protocols are shown (AirPlay and AirPlay 2 each have their own switch), hide single-app capture,
+core/settings/    App settings (SharedPreferences): which protocols are shown (AirPlay and AirPlay 2 share one switch, one audio delay, and a "Use AirPlay 2" toggle that is on by default: a receiver that speaks AirPlay 2 is only offered with it, one that only speaks AirPlay 1 is still listed; AirPlay 2 is labelled "AirPlay" and AirPlay 1 "AirPlay (legacy V1)"), hide single-app capture,
                   audio format per family (AAC/LPCM/WAV), AirPlay audio delay, Chromecast disconnect on mute, theme (system/light/dark),
                   mute the phone while streaming, reconnect dropped devices, AAC quality (128/192/256 kbps), stop streaming after N minutes of silence.
                   A disabled protocol is only hidden from the Devices list; the network search still runs.

@@ -23,6 +23,8 @@ interface SettingsRepository {
 
     fun setAirPlayAudioDelayMillis(delayMillis: Int)
 
+    fun setUsesAirPlay2WhereSupported(usesAirPlay2WhereSupported: Boolean)
+
     fun setDisconnectsChromecastOnMute(disconnectsOnMute: Boolean)
 
     fun setThemeMode(themeMode: ThemeMode)

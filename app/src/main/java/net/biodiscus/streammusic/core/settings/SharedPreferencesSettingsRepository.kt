@@ -22,6 +22,7 @@ private const val DISABLED_PROTOCOLS_KEY = "disabled_protocols"
 private const val HIDES_SINGLE_APP_CAPTURE_KEY = "hides_single_app_capture"
 private const val AUDIO_FORMATS_KEY = "audio_formats"
 private const val AIRPLAY_AUDIO_DELAY_MILLIS_KEY = "airplay_audio_delay_millis"
+private const val USES_AIRPLAY_2_WHERE_SUPPORTED_KEY = "uses_airplay_2_where_supported"
 private const val DISCONNECTS_CHROMECAST_ON_MUTE_KEY = "disconnects_chromecast_on_mute"
 private const val THEME_MODE_KEY = "theme_mode"
 private const val MUTES_PHONE_WHILE_STREAMING_KEY = "mutes_phone_while_streaming"
@@ -58,6 +59,10 @@ internal class SharedPreferencesSettingsRepository @Inject constructor(
 
     override fun setAirPlayAudioDelayMillis(delayMillis: Int) {
         changeSettings { current -> current.copy(airPlayAudioDelayMillis = delayMillis) }
+    }
+
+    override fun setUsesAirPlay2WhereSupported(usesAirPlay2WhereSupported: Boolean) {
+        changeSettings { current -> current.copy(usesAirPlay2WhereSupported = usesAirPlay2WhereSupported) }
     }
 
     override fun setDisconnectsChromecastOnMute(disconnectsOnMute: Boolean) {
@@ -103,6 +108,7 @@ internal class SharedPreferencesSettingsRepository @Inject constructor(
             hidesSingleAppCapture = preferences.getBoolean(HIDES_SINGLE_APP_CAPTURE_KEY, defaults.hidesSingleAppCapture),
             audioFormats = decodeAudioFormats(audioFormatEntries),
             airPlayAudioDelayMillis = preferences.getInt(AIRPLAY_AUDIO_DELAY_MILLIS_KEY, defaults.airPlayAudioDelayMillis),
+            usesAirPlay2WhereSupported = preferences.getBoolean(USES_AIRPLAY_2_WHERE_SUPPORTED_KEY, defaults.usesAirPlay2WhereSupported),
             disconnectsChromecastOnMute = preferences.getBoolean(
                 DISCONNECTS_CHROMECAST_ON_MUTE_KEY,
                 defaults.disconnectsChromecastOnMute,
@@ -130,6 +136,7 @@ internal class SharedPreferencesSettingsRepository @Inject constructor(
             .putBoolean(HIDES_SINGLE_APP_CAPTURE_KEY, settings.hidesSingleAppCapture)
             .putStringSet(AUDIO_FORMATS_KEY, encodeAudioFormats(settings.audioFormats))
             .putInt(AIRPLAY_AUDIO_DELAY_MILLIS_KEY, settings.airPlayAudioDelayMillis)
+            .putBoolean(USES_AIRPLAY_2_WHERE_SUPPORTED_KEY, settings.usesAirPlay2WhereSupported)
             .putBoolean(DISCONNECTS_CHROMECAST_ON_MUTE_KEY, settings.disconnectsChromecastOnMute)
             .putString(THEME_MODE_KEY, settings.themeMode.name)
             .putBoolean(MUTES_PHONE_WHILE_STREAMING_KEY, settings.mutesPhoneWhileStreaming)

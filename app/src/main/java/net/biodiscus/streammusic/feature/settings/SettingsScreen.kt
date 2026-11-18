@@ -56,6 +56,7 @@ internal class SettingsActions(
     val onProtocolFamilyToggled: (ProtocolFamily, Boolean) -> Unit,
     val onAudioFormatChosen: (ProtocolFamily, StreamAudioFormat) -> Unit,
     val onAirPlayAudioDelayChanged: (Int) -> Unit,
+    val onUsesAirPlay2WhereSupportedChanged: (Boolean) -> Unit,
     val onDisconnectsChromecastOnMuteChanged: (Boolean) -> Unit,
     val onThemeModeChosen: (ThemeMode) -> Unit,
     val onMutesPhoneWhileStreamingChanged: (Boolean) -> Unit,
@@ -79,6 +80,7 @@ internal fun SettingsRoute(
         onProtocolFamilyToggled = viewModel::onProtocolFamilyToggled,
         onAudioFormatChosen = viewModel::onAudioFormatChosen,
         onAirPlayAudioDelayChanged = viewModel::onAirPlayAudioDelayChanged,
+        onUsesAirPlay2WhereSupportedChanged = viewModel::onUsesAirPlay2WhereSupportedChanged,
         onDisconnectsChromecastOnMuteChanged = viewModel::onDisconnectsChromecastOnMuteChanged,
         onThemeModeChosen = viewModel::onThemeModeChosen,
         onMutesPhoneWhileStreamingChanged = viewModel::onMutesPhoneWhileStreamingChanged,
@@ -164,7 +166,7 @@ private fun ProtocolFamilySettings(
     actions: SettingsActions,
 ) {
     val isEnabled = settings.isEnabled(family)
-    val canFoldOptions = isEnabled && hasOptions(family, settings)
+    val canFoldOptions = isEnabled && hasOptions(family)
     var isExpanded by rememberSaveable(family.name) { mutableStateOf(false) }
 
     FamilyHeader(
@@ -218,7 +220,13 @@ private fun FamilyOptions(
             onOptionChosen = { format -> actions.onAudioFormatChosen(family, format) },
         )
     }
-    if (showsAirPlayAudioDelay(family, settings)) {
+    if (family == ProtocolFamily.AIRPLAY) {
+        SwitchSetting(
+            title = stringResource(R.string.settings_use_airplay_2),
+            description = stringResource(R.string.settings_use_airplay_2_description),
+            isChecked = settings.usesAirPlay2WhereSupported,
+            onCheckedChange = actions.onUsesAirPlay2WhereSupportedChanged,
+        )
         AudioDelaySetting(settings.airPlayAudioDelayMillis, actions.onAirPlayAudioDelayChanged)
     }
     if (family == ProtocolFamily.GOOGLE_CAST) {
@@ -231,9 +239,9 @@ private fun FamilyOptions(
     }
 }
 
-private fun hasOptions(family: ProtocolFamily, settings: AppSettings): Boolean =
+private fun hasOptions(family: ProtocolFamily): Boolean =
     family.selectableAudioFormats.isNotEmpty() ||
-        showsAirPlayAudioDelay(family, settings) ||
+        family == ProtocolFamily.AIRPLAY ||
         family == ProtocolFamily.GOOGLE_CAST
 
 private class FoldArrow(val icon: ImageVector, val descriptionResource: Int)
@@ -244,10 +252,6 @@ private fun foldArrow(isExpanded: Boolean): FoldArrow =
     } else {
         FoldArrow(Icons.Filled.KeyboardArrowDown, R.string.settings_expand_section)
     }
-
-/** One delay applies to both AirPlay generations, so it is shown once: under AirPlay, or under AirPlay 2 when AirPlay is off. */
-private fun showsAirPlayAudioDelay(family: ProtocolFamily, settings: AppSettings): Boolean =
-    family == ProtocolFamily.AIRPLAY || (family == ProtocolFamily.AIRPLAY_2 && !settings.isEnabled(ProtocolFamily.AIRPLAY))
 
 @Composable
 private fun AudioDelaySetting(delayMillis: Int, onDelayChanged: (Int) -> Unit) {
@@ -279,6 +283,7 @@ private fun SettingsScreenPreview() {
                 onProtocolFamilyToggled = { _, _ -> },
                 onAudioFormatChosen = { _, _ -> },
                 onAirPlayAudioDelayChanged = {},
+                onUsesAirPlay2WhereSupportedChanged = {},
                 onDisconnectsChromecastOnMuteChanged = {},
                 onThemeModeChosen = {},
                 onMutesPhoneWhileStreamingChanged = {},

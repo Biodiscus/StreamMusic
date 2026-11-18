@@ -42,8 +42,7 @@ enum class ProtocolFamily(
     val protocols: Set<DeviceProtocol>,
     val selectableAudioFormats: List<StreamAudioFormat> = emptyList(),
 ) {
-    AIRPLAY("AirPlay", setOf(DeviceProtocol.AIRPLAY)),
-    AIRPLAY_2("AirPlay 2", setOf(DeviceProtocol.AIRPLAY_2)),
+    AIRPLAY("AirPlay", setOf(DeviceProtocol.AIRPLAY, DeviceProtocol.AIRPLAY_2)),
     ARIACAST("AriaCast", setOf(DeviceProtocol.ARIACAST)),
     DLNA("DLNA / UPnP", setOf(DeviceProtocol.DLNA), listOf(StreamAudioFormat.AAC, StreamAudioFormat.LPCM, StreamAudioFormat.WAV)),
     GOOGLE_CAST("Google Cast", setOf(DeviceProtocol.CHROMECAST), listOf(StreamAudioFormat.AAC, StreamAudioFormat.WAV)),
@@ -68,6 +67,8 @@ data class AppSettings(
     val audioFormats: Map<ProtocolFamily, StreamAudioFormat> = emptyMap(),
     /** How much later AirPlay and AirPlay 2 devices play than the phone sends, to line them up with devices that buffer more. */
     val airPlayAudioDelayMillis: Int = 0,
+    /** A receiver that speaks AirPlay 2 is only offered with AirPlay 2. A receiver that only speaks AirPlay 1 is still listed. */
+    val usesAirPlay2WhereSupported: Boolean = true,
     /** Stops streaming to a Chromecast as soon as it is muted. */
     val disconnectsChromecastOnMute: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -87,8 +88,15 @@ fun AppSettings.withFamilyEnabled(family: ProtocolFamily, isEnabled: Boolean): A
     return copy(disabledProtocols = newDisabledProtocols)
 }
 
-fun List<StreamingDevice>.withoutDisabledProtocols(settings: AppSettings): List<StreamingDevice> =
-    filter { device -> device.protocol !in settings.disabledProtocols }
+fun List<StreamingDevice>.withoutDisabledProtocols(settings: AppSettings): List<StreamingDevice> {
+    val enabledDevices = filter { device -> device.protocol !in settings.disabledProtocols }
+    return if (settings.usesAirPlay2WhereSupported) enabledDevices.withoutAirPlay1WhereAirPlay2Works() else enabledDevices
+}
+
+private fun List<StreamingDevice>.withoutAirPlay1WhereAirPlay2Works(): List<StreamingDevice> {
+    val hostsWithAirPlay2 = filter { device -> device.protocol == DeviceProtocol.AIRPLAY_2 }.map { device -> device.host }.toSet()
+    return filter { device -> device.protocol != DeviceProtocol.AIRPLAY || device.host !in hostsWithAirPlay2 }
+}
 
 fun AppSettings.audioFormatOf(family: ProtocolFamily): StreamAudioFormat {
     val chosenFormat = audioFormats[family]

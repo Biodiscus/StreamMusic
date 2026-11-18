@@ -49,6 +49,10 @@ internal class SettingsViewModel @Inject constructor(
         settingsRepository.setAirPlayAudioDelayMillis(delayMillis)
     }
 
+    fun onUsesAirPlay2WhereSupportedChanged(usesAirPlay2WhereSupported: Boolean) {
+        settingsRepository.setUsesAirPlay2WhereSupported(usesAirPlay2WhereSupported)
+    }
+
     fun onDisconnectsChromecastOnMuteChanged(disconnectsOnMute: Boolean) {
         settingsRepository.setDisconnectsChromecastOnMute(disconnectsOnMute)
     }

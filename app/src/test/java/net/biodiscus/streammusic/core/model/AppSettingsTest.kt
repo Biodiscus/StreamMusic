@@ -23,10 +23,45 @@ class AppSettingsTest {
     }
 
     @Test
-    fun `disabling AirPlay leaves AirPlay 2 enabled`() {
+    fun `disabling AirPlay disables both AirPlay generations`() {
         val settings = AppSettings().withFamilyEnabled(ProtocolFamily.AIRPLAY, isEnabled = false)
 
-        assertEquals(setOf(DeviceProtocol.AIRPLAY), settings.disabledProtocols)
+        assertEquals(setOf(DeviceProtocol.AIRPLAY, DeviceProtocol.AIRPLAY_2), settings.disabledProtocols)
+    }
+
+    @Test
+    fun `AirPlay 2 is used where supported by default`() {
+        assertTrue(AppSettings().usesAirPlay2WhereSupported)
+    }
+
+    @Test
+    fun `drops AirPlay 1 of a receiver that also speaks AirPlay 2`() {
+        val airPlay2 = aDevice(protocol = DeviceProtocol.AIRPLAY_2, host = "10.0.0.5")
+        val airPlay1 = aDevice(protocol = DeviceProtocol.AIRPLAY, host = "10.0.0.5")
+
+        val devices = listOf(airPlay2, airPlay1).withoutDisabledProtocols(AppSettings(usesAirPlay2WhereSupported = true))
+
+        assertEquals(listOf(airPlay2), devices)
+    }
+
+    @Test
+    fun `keeps a receiver that only speaks AirPlay 1`() {
+        val airPlay1 = aDevice(protocol = DeviceProtocol.AIRPLAY, host = "10.0.0.6")
+        val airPlay2OfOtherReceiver = aDevice(protocol = DeviceProtocol.AIRPLAY_2, host = "10.0.0.5")
+
+        val devices = listOf(airPlay1, airPlay2OfOtherReceiver).withoutDisabledProtocols(AppSettings(usesAirPlay2WhereSupported = true))
+
+        assertEquals(listOf(airPlay1, airPlay2OfOtherReceiver), devices)
+    }
+
+    @Test
+    fun `keeps AirPlay 1 next to AirPlay 2 when AirPlay 2 is not required`() {
+        val airPlay2 = aDevice(protocol = DeviceProtocol.AIRPLAY_2, host = "10.0.0.5")
+        val airPlay1 = aDevice(protocol = DeviceProtocol.AIRPLAY, host = "10.0.0.5")
+
+        val devices = listOf(airPlay2, airPlay1).withoutDisabledProtocols(AppSettings(usesAirPlay2WhereSupported = false))
+
+        assertEquals(listOf(airPlay2, airPlay1), devices)
     }
 
     @Test

@@ -37,6 +37,10 @@ class FakeSettingsRepository : SettingsRepository {
         settings.value = settings.value.copy(airPlayAudioDelayMillis = delayMillis)
     }
 
+    override fun setUsesAirPlay2WhereSupported(usesAirPlay2WhereSupported: Boolean) {
+        settings.value = settings.value.copy(usesAirPlay2WhereSupported = usesAirPlay2WhereSupported)
+    }
+
     override fun setDisconnectsChromecastOnMute(disconnectsOnMute: Boolean) {
         settings.value = settings.value.copy(disconnectsChromecastOnMute = disconnectsOnMute)
     }

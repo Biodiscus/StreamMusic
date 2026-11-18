@@ -86,13 +86,33 @@ class DevicesViewModelTest {
     }
 
     @Test
-    fun `streams with AirPlay when AirPlay 2 is switched off`() = runTest {
-        settingsRepository.setProtocolFamilyEnabled(ProtocolFamily.AIRPLAY_2, isEnabled = false)
+    fun `offers only AirPlay 2 for a receiver that speaks both when AirPlay 2 is used where supported`() = runTest {
         repository.setFoundDevices(airPlay, airPlay2)
 
         viewModel.uiState.test {
             val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
+            assertEquals(listOf(airPlay2), uiState.devices.single().streamingOptions)
+        }
+    }
+
+    @Test
+    fun `still lists a receiver that only speaks AirPlay 1 when AirPlay 2 is used where supported`() = runTest {
+        repository.setFoundDevices(airPlay)
+
+        viewModel.uiState.test {
+            val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
             assertEquals(airPlay, uiState.devices.single().bestStreamingOption)
+        }
+    }
+
+    @Test
+    fun `offers both AirPlay generations when AirPlay 2 is not required`() = runTest {
+        repository.setFoundDevices(airPlay, airPlay2)
+        settingsRepository.setUsesAirPlay2WhereSupported(false)
+
+        viewModel.uiState.test {
+            val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
+            assertEquals(listOf(airPlay2, airPlay), uiState.devices.single().streamingOptions)
         }
     }
 

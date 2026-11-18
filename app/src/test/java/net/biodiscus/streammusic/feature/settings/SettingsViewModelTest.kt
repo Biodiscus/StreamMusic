@@ -35,11 +35,18 @@ class SettingsViewModelTest {
         viewModel.settings.test {
             awaitItem()
 
-            viewModel.onProtocolFamilyToggled(ProtocolFamily.AIRPLAY_2, isEnabled = false)
+            viewModel.onProtocolFamilyToggled(ProtocolFamily.SONOS, isEnabled = false)
 
             val disabledProtocols = awaitItem().disabledProtocols
-            assertEquals(setOf(DeviceProtocol.AIRPLAY_2), disabledProtocols)
+            assertEquals(setOf(DeviceProtocol.SONOS), disabledProtocols)
         }
+    }
+
+    @Test
+    fun `switching Use AirPlay 2 off is saved`() {
+        viewModel.onUsesAirPlay2WhereSupportedChanged(false)
+
+        assertEquals(false, settingsRepository.currentSettings.usesAirPlay2WhereSupported)
     }
 
     @Test
