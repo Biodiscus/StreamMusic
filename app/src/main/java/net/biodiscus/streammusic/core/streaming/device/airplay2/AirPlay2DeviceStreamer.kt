@@ -23,6 +23,7 @@ import net.biodiscus.streammusic.core.streaming.device.airplay.answerTimingReque
 import net.biodiscus.streammusic.core.streaming.device.airplay.ntpTimeFromEpochMillis
 import net.biodiscus.streammusic.core.streaming.device.airplay.sampleNumberAt
 import net.biodiscus.streammusic.core.streaming.device.airplay.streamAudioForever
+import timber.log.Timber
 
 private const val FEEDBACK_INTERVAL_MILLIS = 2_000L
 private const val UNAUTHORIZED_STATUS_CODE = 401
@@ -49,6 +50,7 @@ internal class AirPlay2DeviceStreamer(
 ) : DeviceStreamer {
 
     override suspend fun stream(onStreaming: () -> Unit): Nothing {
+        Timber.d("Opening a connection to %s:%d", device.host, device.port)
         val connection = connector.open(device.host, device.port)
         val conversation = AirPlay2Conversation(connection)
         try {
@@ -73,6 +75,7 @@ internal class AirPlay2DeviceStreamer(
 
         val startTimestamp = sampleNumberAt(nowNtpTime(), RAOP_SAMPLE_RATE_HZ) + airPlaySamplesDelayedBy(audioDelayMillis)
         conversation.startRecording(startTimestamp)
+        Timber.i("Recording started, the audio delay is %d ms", audioDelayMillis)
         val sender = RaopAudioSender(
             connection,
             ChaChaPcmPacketEncoder(sharedKey),
@@ -103,6 +106,7 @@ private class AirPlay2Conversation(private val connection: RaopConnection) {
     suspend fun setUp(): ByteArray {
         askForInfo()
         val pairingSecret = TransientPairing(connection).pair()
+        Timber.d("Paired with the receiver")
         enableEncryption(pairingSecret)
         val eventPort = setUpSession()
         openEventChannel(pairingSecret, eventPort)
@@ -128,13 +132,15 @@ private class AirPlay2Conversation(private val connection: RaopConnection) {
         try {
             send(RtspRequest("TEARDOWN", sessionUrl, rtspHeaders("Session" to "0")))
         } catch (error: IOException) {
+            Timber.d(error, "Could not send TEARDOWN")
             // The receiver is unreachable, so it ends the session by itself.
         }
     }
 
     /** Receivers that do not know /info answer with an error, which is fine. */
     private suspend fun askForInfo() {
-        connection.sendRtsp(RtspRequest("GET", "/info", rtspHeaders()))
+        val response = connection.sendRtsp(RtspRequest("GET", "/info", rtspHeaders()))
+        Timber.d("GET /info answered %d %s", response.statusCode, response.reason)
     }
 
     private fun enableEncryption(pairingSecret: ByteArray) {
@@ -148,7 +154,9 @@ private class AirPlay2Conversation(private val connection: RaopConnection) {
     private suspend fun setUpSession(): Int {
         val body = buildSessionSetupBody(UUID.randomUUID().toString().uppercase(), connection.timingPort)
         val response = send(RtspRequest("SETUP", sessionUrl, plistHeaders(), body))
-        return parseEventPort(response.body)
+        val eventPort = parseEventPort(response.body)
+        Timber.d("The receiver listens for events on port %d", eventPort)
+        return eventPort
     }
 
     /** The receiver reads what the phone sends with its "read" key, so the keys are the other way around. */
@@ -164,11 +172,13 @@ private class AirPlay2Conversation(private val connection: RaopConnection) {
         val body = buildStreamSetupBody(connection.controlPort, sharedKey, sessionId)
         val response = send(RtspRequest("SETUP", sessionUrl, plistHeaders(), body))
         val ports = parseStreamPorts(response.body)
+        Timber.d("The receiver listens for audio on port %d and for control packets on port %d", ports.dataPort, ports.controlPort)
         connection.aimUdpSocketsAt(RaopServerPorts(ports.dataPort, ports.controlPort, timingPort = null))
     }
 
     private suspend fun send(request: RtspRequest): RtspResponse {
         val response = connection.sendRtsp(request)
+        Timber.d("RTSP %s answered %d %s", request.method, response.statusCode, response.reason)
         if (!response.isSuccess) throw IOException(describeRefusal(request.method, response))
         return response
     }

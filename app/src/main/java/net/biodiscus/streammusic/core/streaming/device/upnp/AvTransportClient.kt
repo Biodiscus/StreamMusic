@@ -6,9 +6,11 @@ import java.net.URL
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 private const val TIMEOUT_MILLIS = 5_000
 private const val OK_STATUS_CODE = 200
+private const val MAX_LOGGED_ANSWER_CHARACTERS = 500
 
 /** The three UPnP AVTransport actions needed to play a stream on a renderer. */
 internal interface AvTransportClient {
@@ -38,10 +40,24 @@ internal class SoapAvTransportClient @Inject constructor() : AvTransportClient {
             try {
                 postSoapRequest(connection, action, arguments)
                 val statusCode = connection.responseCode
-                if (statusCode != OK_STATUS_CODE) throw IOException("$action was rejected: HTTP $statusCode")
+                if (statusCode != OK_STATUS_CODE) {
+                    Timber.w("%s at %s was rejected: HTTP %d, the device said: %s", action, controlUrl, statusCode, readErrorAnswer(connection))
+                    throw IOException("$action was rejected: HTTP $statusCode")
+                }
+                Timber.d("%s answered HTTP %d", action, statusCode)
             } finally {
                 connection.disconnect()
             }
+        }
+    }
+
+    /** A UPnP device explains a refusal in the body of the answer, as a SOAP fault with an error code. */
+    private fun readErrorAnswer(connection: HttpURLConnection): String {
+        val errorStream = connection.errorStream ?: return ""
+        return try {
+            errorStream.bufferedReader().use { reader -> reader.readText() }.take(MAX_LOGGED_ANSWER_CHARACTERS)
+        } catch (error: IOException) {
+            ""
         }
     }
 

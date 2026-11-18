@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -64,6 +65,7 @@ internal class SettingsActions(
 internal fun SettingsRoute(
     onBackClicked: () -> Unit,
     onDiscoveryDebugClicked: () -> Unit,
+    onSessionLogClicked: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -80,6 +82,7 @@ internal fun SettingsRoute(
         actions = actions,
         onBackClicked = onBackClicked,
         onDiscoveryDebugClicked = onDiscoveryDebugClicked,
+        onSessionLogClicked = onSessionLogClicked,
         modifier = modifier,
     )
 }
@@ -91,6 +94,7 @@ internal fun SettingsScreen(
     actions: SettingsActions,
     onBackClicked: () -> Unit,
     onDiscoveryDebugClicked: () -> Unit,
+    onSessionLogClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -130,6 +134,12 @@ internal fun SettingsScreen(
                 supportingContent = { Text(stringResource(R.string.settings_discovery_debug_description)) },
                 leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
                 modifier = Modifier.clickable(onClick = onDiscoveryDebugClicked),
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_session_log)) },
+                supportingContent = { Text(stringResource(R.string.settings_session_log_description)) },
+                leadingContent = { Icon(Icons.Filled.Description, contentDescription = null) },
+                modifier = Modifier.clickable(onClick = onSessionLogClicked),
             )
         }
     }
@@ -309,6 +319,7 @@ private fun SettingsScreenPreview() {
             ),
             onBackClicked = {},
             onDiscoveryDebugClicked = {},
+            onSessionLogClicked = {},
         )
     }
 }

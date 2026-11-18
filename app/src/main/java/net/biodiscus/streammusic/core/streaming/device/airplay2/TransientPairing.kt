@@ -4,6 +4,7 @@ import java.io.IOException
 import net.biodiscus.streammusic.core.streaming.device.airplay.HTTP_PROTOCOL
 import net.biodiscus.streammusic.core.streaming.device.airplay.RaopConnection
 import net.biodiscus.streammusic.core.streaming.device.airplay.RtspRequest
+import timber.log.Timber
 
 /** Receivers that do not ask the user for a code accept this pin. It is the same for every receiver. */
 private const val TRANSIENT_PIN = "3939"
@@ -41,11 +42,13 @@ internal class TransientPairing(private val connection: RaopConnection) {
 
     /** Receivers that show a pin on their screen show it now. For transient pairing it does not matter. */
     private suspend fun askReceiverToStartPairing() {
-        connection.sendRtsp(RtspRequest("POST", "/pair-pin-start", PAIRING_HEADERS, protocol = HTTP_PROTOCOL))
+        val response = connection.sendRtsp(RtspRequest("POST", "/pair-pin-start", PAIRING_HEADERS, protocol = HTTP_PROTOCOL))
+        Timber.d("Pairing: /pair-pin-start answered %d", response.statusCode)
     }
 
     private suspend fun post(path: String, body: ByteArray): ByteArray {
         val response = connection.sendRtsp(RtspRequest("POST", path, PAIRING_HEADERS, body, HTTP_PROTOCOL))
+        Timber.d("Pairing: %s answered %d %s", path, response.statusCode, response.reason)
         if (!response.isSuccess) throw IOException("The device refused to pair: ${response.statusCode} ${response.reason}")
         return response.body
     }

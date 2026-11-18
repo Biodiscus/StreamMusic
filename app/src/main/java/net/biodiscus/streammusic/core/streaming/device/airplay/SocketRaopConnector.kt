@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 private const val USER_AGENT = "iTunes/11.0.4 (Windows; N)"
 private const val CONNECT_TIMEOUT_MILLIS = 5_000
@@ -43,6 +44,7 @@ internal class SocketRaopConnector @Inject constructor() : RaopConnector {
             rtspSocket.connect(InetSocketAddress(host, rtspPort), CONNECT_TIMEOUT_MILLIS)
             rtspSocket.soTimeout = RTSP_ANSWER_TIMEOUT_MILLIS
             rtspSocket.tcpNoDelay = true
+            Timber.d("Connected to %s:%d", host, rtspPort)
             SocketRaopConnection(InetAddress.getByName(host), rtspSocket, udpSockets)
         } catch (error: Exception) {
             udpSockets.close()
@@ -97,12 +99,14 @@ private class SocketRaopConnection(
     }
 
     override fun enableRtspEncryption(sendKey: ByteArray, receiveKey: ByteArray) {
+        Timber.d("The RTSP connection is encrypted from now on")
         rtspInput = BufferedInputStream(HapInputStream(rtspSocket.getInputStream(), receiveKey))
         rtspOutput = HapOutputStream(rtspSocket.getOutputStream(), sendKey)
     }
 
     override suspend fun openEventChannel(port: Int, sendKey: ByteArray, receiveKey: ByteArray) {
         val socket = withContext(Dispatchers.IO) { connectWithRetries(port) }
+        Timber.d("The event channel is open on port %d", port)
         val input = BufferedInputStream(HapInputStream(socket.getInputStream(), receiveKey))
         eventChannel = EventChannel(socket, input, HapOutputStream(socket.getOutputStream(), sendKey))
     }
@@ -117,6 +121,7 @@ private class SocketRaopConnection(
     }
 
     override fun aimUdpSocketsAt(ports: RaopServerPorts) {
+        Timber.d("Sending audio to port %d and control packets to port %d", ports.audioPort, ports.controlPort)
         deviceAudioAddress = InetSocketAddress(deviceAddress, ports.audioPort)
         deviceControlAddress = InetSocketAddress(deviceAddress, ports.controlPort)
     }
@@ -153,6 +158,7 @@ private class SocketRaopConnection(
             try {
                 return connectTo(port)
             } catch (refused: ConnectException) {
+                Timber.d("The event port %d refused the connection, trying again", port)
                 delay(EVENT_CHANNEL_RETRY_DELAY_MILLIS)
             }
         }

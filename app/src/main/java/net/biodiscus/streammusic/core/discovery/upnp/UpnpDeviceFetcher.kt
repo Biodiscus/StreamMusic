@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.biodiscus.streammusic.core.discovery.isIpv4Address
 import net.biodiscus.streammusic.core.model.StreamingDevice
+import timber.log.Timber
 
 private const val TIMEOUT_MILLIS = 3_000
 
@@ -28,6 +29,7 @@ internal class UpnpDeviceFetcher @Inject constructor() {
             connection.readTimeout = TIMEOUT_MILLIS
             connection.inputStream.bufferedReader().use { it.readText() }
         } catch (error: java.io.IOException) {
+            Timber.d(error, "Could not download the device description from %s", locationUrl)
             null
         }
 
@@ -36,12 +38,21 @@ internal class UpnpDeviceFetcher @Inject constructor() {
         searchTarget: String,
         description: UpnpDescription,
     ): StreamingDevice? {
-        val controlUrl = description.avTransportControlUrl ?: return null
+        val controlUrl = description.avTransportControlUrl
+        if (controlUrl == null) {
+            Timber.d("Skipping %s: it has no AVTransport service, so it cannot play a stream", locationUrl)
+            return null
+        }
         val location = URL(locationUrl)
-        if (!isIpv4Address(location.host)) return null
+        if (!isIpv4Address(location.host)) {
+            Timber.d("Skipping %s: its address is not IPv4", locationUrl)
+            return null
+        }
+        val protocol = classifyUpnpDevice(searchTarget, description)
+        Timber.d("%s is a %s (search target %s)", locationUrl, protocol, searchTarget)
         return StreamingDevice(
             name = description.displayName(fallback = location.host),
-            protocol = classifyUpnpDevice(searchTarget, description),
+            protocol = protocol,
             host = location.host,
             port = location.port,
             avTransportControlUrl = controlUrl,

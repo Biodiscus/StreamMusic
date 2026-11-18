@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.biodiscus.streammusic.core.logging.describeForLog
 import net.biodiscus.streammusic.core.model.DeviceStreamStatus
 import net.biodiscus.streammusic.core.model.StreamAudioFormat
 import net.biodiscus.streammusic.core.model.audioFormatFor
@@ -27,6 +28,7 @@ import net.biodiscus.streammusic.core.streaming.device.DeviceStreamerFactory
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
 import net.biodiscus.streammusic.core.streaming.http.HttpAudioStreamStarter
 import net.biodiscus.streammusic.core.streaming.http.RunningHttpAudioStream
+import timber.log.Timber
 
 private const val PCM_FRAMES_KEPT_PER_LISTENER = 100
 
@@ -150,18 +152,21 @@ internal class StreamingSession(
     }
 
     private suspend fun streamToDevice(device: StreamingDevice, audio: SessionAudio) {
+        Timber.i("Connecting to %s", device.describeForLog())
         stateRepository.deviceStatusChanged(device.id, DeviceStreamStatus.Connecting)
         try {
             streamerFactory.create(device, audio).stream(onStreaming = { markStreaming(device) })
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (failure: Exception) {
+            Timber.e(failure, "Streaming to %s failed", device.describeForLog())
             val reason = failure.message ?: failure.javaClass.simpleName
             stateRepository.deviceStatusChanged(device.id, DeviceStreamStatus.Failed(reason))
         }
     }
 
     private fun markStreaming(device: StreamingDevice) {
+        Timber.i("Streaming to %s (%s)", device.name, device.protocol)
         stateRepository.deviceStatusChanged(device.id, DeviceStreamStatus.Streaming)
     }
 }

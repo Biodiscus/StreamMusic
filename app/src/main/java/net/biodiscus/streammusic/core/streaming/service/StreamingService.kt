@@ -9,7 +9,6 @@ import android.media.projection.MediaProjectionManager
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.util.Log
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -24,8 +23,8 @@ import net.biodiscus.streammusic.core.model.StreamingDevice
 import net.biodiscus.streammusic.core.streaming.StreamingSession
 import net.biodiscus.streammusic.core.streaming.StreamingSessionFactory
 import net.biodiscus.streammusic.core.streaming.capture.PlaybackAudioCapture
+import timber.log.Timber
 
-private const val LOG_TAG = "StreamingService"
 private const val NOTIFICATION_ID = 1
 
 /** Keeps capturing and streaming while the user is in another app. */
@@ -127,7 +126,7 @@ class StreamingService : Service() {
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (failure: Exception) {
-            Log.e(LOG_TAG, "Streaming stopped because of an error", failure)
+            Timber.e(failure, "Streaming stopped because of an error")
         } finally {
             releaseEverythingAndStop()
         }

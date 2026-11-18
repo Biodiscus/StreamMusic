@@ -18,6 +18,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.launch
 import net.biodiscus.streammusic.core.model.StreamAudioFormat
 import net.biodiscus.streammusic.core.streaming.aac.AacEncoder
+import timber.log.Timber
 
 private const val REQUEST_READ_TIMEOUT_MILLIS = 5_000
 private const val AUDIO_FRAMES_KEPT_PER_LISTENER = 100
@@ -30,6 +31,7 @@ internal class HttpAudioStreamServerStarter @Inject constructor() : HttpAudioStr
             .shareIn(scope, SharingStarted.Eagerly)
         val stream = HttpAudioStream(scope, audioFrames, format)
         stream.startAcceptingListeners()
+        Timber.i("Serving the %s stream on port %d", format, stream.port)
         return stream
     }
 
@@ -78,6 +80,7 @@ private class HttpAudioStream(
         try {
             socket.use { sendStream(it) }
         } catch (error: IOException) {
+            Timber.d(error, "A listener stopped listening")
             // The device disconnected or the stream was stopped.
         } finally {
             listenerSockets.remove(socket)
@@ -86,6 +89,7 @@ private class HttpAudioStream(
 
     private suspend fun sendStream(socket: Socket) {
         val requestLine = readRequestLine(socket)
+        Timber.i("%s asked for the stream: %s", socket.inetAddress.hostAddress, requestLine)
         val output = socket.getOutputStream()
         output.write(buildStreamResponseHeaders(format).toByteArray())
         output.flush()

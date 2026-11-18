@@ -10,8 +10,13 @@ internal data object SettingsDestination
 internal fun NavGraphBuilder.settingsScreen(
     onBackClicked: () -> Unit,
     onDiscoveryDebugClicked: () -> Unit,
+    onSessionLogClicked: () -> Unit,
 ) {
     composable<SettingsDestination> {
-        SettingsRoute(onBackClicked = onBackClicked, onDiscoveryDebugClicked = onDiscoveryDebugClicked)
+        SettingsRoute(
+            onBackClicked = onBackClicked,
+            onDiscoveryDebugClicked = onDiscoveryDebugClicked,
+            onSessionLogClicked = onSessionLogClicked,
+        )
     }
 }

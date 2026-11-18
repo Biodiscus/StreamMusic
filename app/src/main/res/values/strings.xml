@@ -50,6 +50,8 @@
     <string name="settings_troubleshooting_header">Troubleshooting</string>
     <string name="settings_discovery_debug">Discovery debug view</string>
     <string name="settings_discovery_debug_description">Everything the network search found, one entry per protocol</string>
+    <string name="settings_session_log">Session log</string>
+    <string name="settings_session_log_description">What the app did since it started, including why a stream failed</string>
 
     <string name="debug_title">Discovery debug</string>
     <string name="debug_searching">Searching… nothing found yet</string>
@@ -61,6 +63,16 @@
     <string name="debug_address">Address: %1$s:%2$d</string>
     <string name="debug_id">Id: %1$s</string>
     <string name="debug_control_url">AVTransport control URL: %1$s</string>
+
+    <string name="logs_title">Session log</string>
+    <string name="logs_download">Save the log as a text file</string>
+    <string name="logs_saved">Log saved</string>
+    <string name="logs_save_failed">Could not save the log</string>
+    <string name="logs_empty">Nothing logged yet</string>
+    <string name="logs_filter_all">Debug</string>
+    <string name="logs_filter_info">Info</string>
+    <string name="logs_filter_warning">Warning</string>
+    <string name="logs_filter_error">Error</string>
 
     <string name="devices_stop">Stop streaming</string>
     <string name="devices_status_connecting">Connecting…</string>

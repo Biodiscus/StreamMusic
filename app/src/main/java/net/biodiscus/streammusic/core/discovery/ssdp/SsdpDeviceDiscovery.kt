@@ -2,7 +2,6 @@ package net.biodiscus.streammusic.core.discovery.ssdp
 
 import android.content.Context
 import android.net.wifi.WifiManager
-import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
 import java.net.DatagramPacket
@@ -23,8 +22,8 @@ import kotlinx.coroutines.withContext
 import net.biodiscus.streammusic.core.discovery.DeviceDiscovery
 import net.biodiscus.streammusic.core.discovery.upnp.UpnpDeviceFetcher
 import net.biodiscus.streammusic.core.model.StreamingDevice
+import timber.log.Timber
 
-private const val LOG_TAG = "SsdpDeviceDiscovery"
 private const val SEARCH_REPEAT_DELAY_MILLIS = 10_000L
 private const val MAX_RESPONSE_BYTES = 2_048
 
@@ -37,12 +36,14 @@ internal class SsdpDeviceDiscovery @Inject constructor(
     override fun discover(): Flow<StreamingDevice> = channelFlow {
         val multicastLock = acquireMulticastLock()
         val socket = DatagramSocket()
+        Timber.d("Started the SSDP search for %d kinds of devices, from port %d", SSDP_SEARCH_TARGETS.size, socket.localPort)
 
         launch { sendSearchesRepeatedly(socket) }
         launch { receiveResponses(socket, devices = this@channelFlow) }
 
         // Closing the socket is what unblocks DatagramSocket.receive when the flow is cancelled.
         awaitClose {
+            Timber.d("Stopped the SSDP search")
             socket.close()
             multicastLock.release()
         }
@@ -69,7 +70,7 @@ internal class SsdpDeviceDiscovery @Inject constructor(
         try {
             SSDP_SEARCH_TARGETS.forEach { target -> sendSearch(socket, target) }
         } catch (error: IOException) {
-            Log.w(LOG_TAG, "Could not send SSDP search", error)
+            Timber.w(error, "Could not send SSDP search")
         }
     }
 
@@ -86,7 +87,10 @@ internal class SsdpDeviceDiscovery @Inject constructor(
                 while (isActive && !socket.isClosed) {
                     val response = receiveOneResponse(socket) ?: continue
                     val isNewLocation = alreadyFetchedLocations.add(response.location)
-                    if (isNewLocation) launch { fetchAndSend(response, devices) }
+                    if (isNewLocation) {
+                        Timber.d("SSDP answer from %s for %s", response.location, response.searchTarget)
+                        launch { fetchAndSend(response, devices) }
+                    }
                 }
             }
         }

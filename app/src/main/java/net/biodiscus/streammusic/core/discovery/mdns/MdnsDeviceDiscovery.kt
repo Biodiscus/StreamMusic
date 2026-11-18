@@ -3,7 +3,6 @@ package net.biodiscus.streammusic.core.discovery.mdns
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
-import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.net.Inet4Address
 import javax.inject.Inject
@@ -18,8 +17,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import net.biodiscus.streammusic.core.discovery.DeviceDiscovery
 import net.biodiscus.streammusic.core.model.DeviceProtocol
 import net.biodiscus.streammusic.core.model.StreamingDevice
+import timber.log.Timber
 
-private const val LOG_TAG = "MdnsDeviceDiscovery"
 private const val RESOLVE_TIMEOUT_MILLIS = 5_000L
 
 private class FoundService(
@@ -34,12 +33,14 @@ internal class MdnsDeviceDiscovery @Inject constructor(
 
     override fun discover(): Flow<StreamingDevice> = channelFlow {
         val nsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
+        Timber.d("Started the mDNS search for %d kinds of services", MDNS_SERVICE_KINDS.size)
         val foundServices = Channel<FoundService>(Channel.UNLIMITED)
         val listeners = MDNS_SERVICE_KINDS.map { kind -> startBrowsing(nsdManager, kind, foundServices) }
 
         launch { resolveOneAtATime(nsdManager, foundServices, devices = this@channelFlow) }
 
         awaitClose {
+            Timber.d("Stopped the mDNS search")
             listeners.forEach { listener -> nsdManager.stopServiceDiscovery(listener) }
             foundServices.close()
         }
@@ -64,7 +65,11 @@ internal class MdnsDeviceDiscovery @Inject constructor(
         devices: SendChannel<StreamingDevice>,
     ) {
         for (service in foundServices) {
-            val resolved = resolveWithTimeout(nsdManager, service.info) ?: continue
+            val resolved = resolveWithTimeout(nsdManager, service.info)
+            if (resolved == null) {
+                Timber.w("Could not resolve %s (%s) within %d ms", service.info.serviceName, service.protocol, RESOLVE_TIMEOUT_MILLIS)
+                continue
+            }
             toStreamingDevices(resolved, service.protocol).forEach { device -> devices.send(device) }
         }
     }
@@ -83,8 +88,13 @@ internal class MdnsDeviceDiscovery @Inject constructor(
     }
 
     private fun toStreamingDevices(resolved: NsdServiceInfo, foundProtocol: DeviceProtocol): List<StreamingDevice> {
-        val address = resolved.host as? Inet4Address ?: return emptyList()
+        val address = resolved.host as? Inet4Address
+        if (address == null) {
+            Timber.d("Skipping %s: its address %s is not IPv4", resolved.serviceName, resolved.host)
+            return emptyList()
+        }
         val textRecords = resolved.attributes.mapValues { (_, bytes) -> String(bytes ?: ByteArray(0)) }
+        Timber.d("Resolved %s (%s) at %s:%d with text records %s", resolved.serviceName, foundProtocol, address.hostAddress, resolved.port, textRecords)
         return protocolsAnnouncedBy(foundProtocol, textRecords).map { protocol ->
             StreamingDevice(
                 name = friendlyMdnsName(protocol, resolved.serviceName, textRecords),
@@ -108,7 +118,7 @@ private class FirstResolveCallback : NsdManager.ServiceInfoCallback {
     }
 
     override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
-        Log.w(LOG_TAG, "Could not resolve a service: error $errorCode")
+        Timber.w("Could not resolve a service: error %d", errorCode)
         isRegistered = false
         resolved.complete(null)
     }
@@ -125,14 +135,26 @@ private class ServiceBrowseListener(
     private val onServiceFound: (NsdServiceInfo) -> Unit,
 ) : NsdManager.DiscoveryListener {
 
-    override fun onServiceFound(serviceInfo: NsdServiceInfo) = onServiceFound.invoke(serviceInfo)
-
-    override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-        Log.w(LOG_TAG, "Could not browse ${kind.serviceType}: error $errorCode")
+    override fun onServiceFound(serviceInfo: NsdServiceInfo) {
+        Timber.d("mDNS found %s (%s)", serviceInfo.serviceName, kind.serviceType)
+        onServiceFound.invoke(serviceInfo)
     }
 
-    override fun onServiceLost(serviceInfo: NsdServiceInfo) = Unit
-    override fun onDiscoveryStarted(serviceType: String) = Unit
+    override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+        Timber.w("Could not browse %s: error %d", kind.serviceType, errorCode)
+    }
+
+    override fun onServiceLost(serviceInfo: NsdServiceInfo) {
+        Timber.d("mDNS lost %s (%s)", serviceInfo.serviceName, kind.serviceType)
+    }
+
+    override fun onDiscoveryStarted(serviceType: String) {
+        Timber.d("Browsing for %s", serviceType)
+    }
+
     override fun onDiscoveryStopped(serviceType: String) = Unit
-    override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) = Unit
+
+    override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
+        Timber.w("Could not stop browsing %s: error %d", serviceType, errorCode)
+    }
 }

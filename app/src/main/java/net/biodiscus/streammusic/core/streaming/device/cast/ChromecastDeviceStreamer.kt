@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import net.biodiscus.streammusic.core.model.StreamingDevice
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamer
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
+import timber.log.Timber
 
 private const val HEARTBEAT_INTERVAL_MILLIS = 5_000L
 private const val LAUNCH_REQUEST_ID = 1
@@ -27,7 +28,9 @@ internal class ChromecastDeviceStreamer(
 ) : DeviceStreamer {
 
     override suspend fun stream(onStreaming: () -> Unit): Nothing {
+        Timber.d("Opening a Cast channel to %s:%d", device.host, device.port)
         val channel = channelOpener.open(device.host, device.port)
+        Timber.d("Cast channel to %s is open", device.name)
         val conversation = CastConversation(channel, disconnectsOnMute)
         coroutineScope {
             launch(start = CoroutineStart.UNDISPATCHED) { conversation.endWhenCancelled() }
@@ -60,10 +63,13 @@ private class CastConversation(
         )
         val app = waitForLaunchedApp()
         launchedSessionId = app.sessionId
+        Timber.d("The Chromecast started its media player (transport %s)", app.transportId)
 
         send(app.transportId, CastNamespace.CONNECTION, connectPayload())
+        Timber.i("Asking the Chromecast to load %s (%s)", streamUrl, contentType)
         send(app.transportId, CastNamespace.MEDIA, loadLiveAudioPayload(streamUrl, contentType, LOAD_REQUEST_ID))
         waitForPlayerStatus()
+        Timber.i("The Chromecast is playing")
     }
 
     suspend fun listenUntilPlaybackStops(): Nothing {
@@ -71,7 +77,7 @@ private class CastConversation(
             val message = receiveWithoutHeartbeats()
             if (payloadType(message.payload) != "MEDIA_STATUS") continue
             val idleReason = findIdleReason(message.payload)
-            if (idleReason != null) throw IOException("Chromecast stopped playing: $idleReason")
+            if (idleReason != null) failBecauseOf("Chromecast stopped playing: $idleReason", message.payload)
         }
     }
 
@@ -98,7 +104,7 @@ private class CastConversation(
         while (true) {
             val message = receiveWithoutHeartbeats()
             val type = payloadType(message.payload)
-            if (type == "LAUNCH_ERROR") throw IOException("Chromecast could not start its media player")
+            if (type == "LAUNCH_ERROR") failBecauseOf("Chromecast could not start its media player", message.payload)
             if (type != "RECEIVER_STATUS") continue
             val app = findLaunchedApp(message.payload, DEFAULT_MEDIA_RECEIVER_APP_ID)
             if (app != null) return app
@@ -109,7 +115,7 @@ private class CastConversation(
         while (true) {
             val message = receiveWithoutHeartbeats()
             val type = payloadType(message.payload)
-            if (type in LOAD_FAILURE_TYPES) throw IOException("Chromecast refused the stream: $type")
+            if (type in LOAD_FAILURE_TYPES) failBecauseOf("Chromecast refused the stream: $type", message.payload)
             if (type == "MEDIA_STATUS" && isPlayerStatus(message.payload)) return
         }
     }
@@ -120,14 +126,21 @@ private class CastConversation(
             val message = channel.receive()
             val type = payloadType(message.payload)
             if (message.namespace == CastNamespace.CONNECTION && type == "CLOSE") {
-                throw IOException("Chromecast closed the connection")
+                failBecauseOf("Chromecast closed the connection", message.payload)
             }
             if (message.namespace != CastNamespace.HEARTBEAT) {
+                Timber.d("The Chromecast sent %s on %s", type, message.namespace)
                 failWhenMutedOnPurpose(message)
                 return message
             }
             if (type == "PING") send(message.sourceId, CastNamespace.HEARTBEAT, pongPayload())
         }
+    }
+
+    /** The Chromecast explains itself in the payload, which the short error message for the screen cannot hold. */
+    private fun failBecauseOf(problem: String, payload: String): Nothing {
+        Timber.w("%s. The Chromecast said: %s", problem, payload)
+        throw IOException(problem)
     }
 
     private fun failWhenMutedOnPurpose(message: CastMessage) {
@@ -142,6 +155,7 @@ private class CastConversation(
         try {
             send(PLATFORM_RECEIVER_ID, CastNamespace.RECEIVER, stopPayload(sessionId, STOP_REQUEST_ID))
         } catch (error: IOException) {
+            Timber.d(error, "Could not stop the Chromecast media player")
             // The Chromecast is unreachable, so its player stops by itself.
         }
     }

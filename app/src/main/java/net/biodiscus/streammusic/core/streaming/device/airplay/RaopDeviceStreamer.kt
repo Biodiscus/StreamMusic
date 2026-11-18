@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import net.biodiscus.streammusic.core.model.StreamingDevice
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamer
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
+import timber.log.Timber
 
 private const val DEFAULT_LATENCY_FRAMES = 11_025
 private const val KEEP_ALIVE_INTERVAL_MILLIS = 25_000L
@@ -24,8 +25,11 @@ internal class RaopDeviceStreamer(
 ) : DeviceStreamer {
 
     override suspend fun stream(onStreaming: () -> Unit): Nothing {
+        Timber.d("Opening an RTSP connection to %s:%d", device.host, device.port)
         val connection = connector.open(device.host, device.port)
-        val conversation = RaopConversation(connection, device.host, audioKeyForDevice())
+        val audioKey = audioKeyForDevice()
+        Timber.d("Audio encryption is %s", if (audioKey == null) "off" else "on")
+        val conversation = RaopConversation(connection, device.host, audioKey)
         try {
             streamOver(connection, conversation, onStreaming)
         } finally {
@@ -45,6 +49,7 @@ internal class RaopDeviceStreamer(
 
         val startTimestamp = sampleNumberAt(nowNtpTime(), RAOP_SAMPLE_RATE_HZ) + airPlaySamplesDelayedBy(audioDelayMillis)
         val latencyFrames = conversation.start(startTimestamp)
+        Timber.i("The receiver buffers %d frames, the audio delay is %d ms", latencyFrames, audioDelayMillis)
         val packetEncoder = AlacAudioPacketEncoder(conversation.audioKey)
         val sender = RaopAudioSender(connection, packetEncoder, Random.nextInt(), latencyFrames, startTimestamp)
         streamAudioForever(
@@ -86,6 +91,7 @@ private class RaopConversation(
         try {
             send(RtspRequest(method = "TEARDOWN", url = sessionUrl))
         } catch (error: IOException) {
+            Timber.d(error, "Could not send TEARDOWN")
             // The receiver is unreachable, so it ends the session by itself.
         }
     }
@@ -118,6 +124,7 @@ private class RaopConversation(
 
     private suspend fun send(request: RtspRequest): RtspResponse {
         val response = connection.sendRtsp(requestInSession(request))
+        Timber.d("RTSP %s answered %d %s", request.method, response.statusCode, response.reason)
         if (!response.isSuccess) throw IOException(describeRefusal(request.method, response))
         return response
     }

@@ -11,6 +11,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString.Companion.toByteString
+import timber.log.Timber
 
 private const val NORMAL_CLOSE_CODE = 1000
 
@@ -44,6 +45,7 @@ internal class WebSocketAriaCastConnector @Inject constructor(
                 }
 
                 override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                    Timber.d("AriaCast is closing the connection: %d %s", code, reason)
                     webSocket.close(NORMAL_CLOSE_CODE, null)
                     closed.complete(null)
                 }
@@ -53,6 +55,7 @@ internal class WebSocketAriaCastConnector @Inject constructor(
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    Timber.w(t, "The AriaCast WebSocket failed, HTTP status %s", response?.code)
                     closed.complete(t)
                     if (continuation.isActive) continuation.resumeWithException(t)
                 }

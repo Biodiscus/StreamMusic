@@ -49,6 +49,9 @@ core/discovery/   Finding devices.
                   `RaopServiceInfo`. A receiver that pairs without a code (feature bit 43 or 48) is listed twice:
                   as `AIRPLAY_2` and as `AIRPLAY`.
   DeviceRepository / NetworkDeviceRepository   Merges all discoveries into one sorted list, one entry per device id.
+core/logging/     Logging with Timber. `SessionLogTree` keeps the newest 500 lines of this app session in memory (nothing on disk)
+                  and exposes them as `SessionLog`. Planted in `StreamMusicApplication`; logcat output only in debuggable builds.
+                  Use `Timber`, never `android.util.Log`. Streamers log protocol milestones, not packets.
 core/groups/      Saved device groups (SharedPreferences + JSON). A group is a name plus its devices (host, name, protocol).
                   Clicking one on the Devices screen selects its devices that are on the network and starts streaming.
 core/settings/    App settings (SharedPreferences): which protocols are shown (AirPlay and AirPlay 2 each have their own switch), hide single-app capture,
@@ -66,7 +69,8 @@ core/streaming/   Sending audio.
   StreamingStateRepository  What the screens observe about the (service-owned) session.
   StreamingController       What screens ask of the running service: add a device, remove a device, stop.
   service/        StreamingService (foreground service), StreamingNotification, StreamingRequest (Intent packing).
-feature/devices/    The one screen: route, screen, ViewModel, UiState, permission and stream-start flow.
+feature/logs/       Session log screen (Settings > Troubleshooting): newest line first, filter by minimum level.
+feature/devices/    The main screen: route, screen, ViewModel, UiState, permission and stream-start flow.
 ui/                 Theme and preview annotations.
 ```
 
@@ -184,3 +188,5 @@ A **unit** is one small method with a clear purpose, input and output. Each unit
 2. Write the smallest method that does the job, with a precise name.
 3. Write its unit tests.
 4. Run `./gradlew testDebugUnitTest` and make sure it is green before reporting the work as done.
+
+**Never test on a device or emulator.** The user does that. Do not run `connectedDebugAndroidTest`, `installDebug`, `adb` or anything else that needs a device. Do not run `assembleDebug` or `lintDebug` unless the user asks, because they are slow. When a change can only be verified on a real device (sockets, audio capture, real speakers), say so in the report and list what the user should try.
