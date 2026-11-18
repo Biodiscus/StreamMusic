@@ -8,6 +8,7 @@ import net.biodiscus.streammusic.testing.MainDispatcherRule
 import net.biodiscus.streammusic.testing.aLogEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
@@ -17,7 +18,12 @@ class SessionLogViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val sessionLog = FakeSessionLog()
-    private val viewModel = SessionLogViewModel(sessionLog)
+    private lateinit var viewModel: SessionLogViewModel
+
+    @Before
+    fun createViewModel() {
+        viewModel = SessionLogViewModel(sessionLog)
+    }
 
     @Test
     fun `starts without entries`() = runTest {
@@ -32,9 +38,7 @@ class SessionLogViewModelTest {
         sessionLog.log(connecting)
 
         viewModel.uiState.test {
-            awaitItem()
-
-            assertEquals(listOf(connecting), awaitItem().shownEntries)
+            assertEquals(listOf(connecting), expectMostRecentItem().shownEntries)
         }
     }
 
@@ -56,8 +60,7 @@ class SessionLogViewModelTest {
         val failed = aLogEntry(message = "Failed", level = LogLevel.ERROR)
         sessionLog.log(connecting, failed)
         viewModel.uiState.test {
-            awaitItem()
-            awaitItem()
+            expectMostRecentItem()
 
             viewModel.onLevelToggled(LogLevel.INFO)
 
@@ -70,8 +73,7 @@ class SessionLogViewModelTest {
         val connecting = aLogEntry(message = "Connecting", level = LogLevel.INFO)
         sessionLog.log(connecting)
         viewModel.uiState.test {
-            awaitItem()
-            awaitItem()
+            expectMostRecentItem()
             viewModel.onLevelToggled(LogLevel.INFO)
             awaitItem()
 

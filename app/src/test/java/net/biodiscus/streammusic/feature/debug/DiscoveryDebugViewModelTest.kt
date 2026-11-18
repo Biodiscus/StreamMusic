@@ -9,6 +9,7 @@ import net.biodiscus.streammusic.testing.aDevice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
@@ -18,7 +19,12 @@ class DiscoveryDebugViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val repository = FakeDeviceRepository()
-    private val viewModel = DiscoveryDebugViewModel(repository)
+    private lateinit var viewModel: DiscoveryDebugViewModel
+
+    @Before
+    fun createViewModel() {
+        viewModel = DiscoveryDebugViewModel(repository)
+    }
 
     @Test
     fun `is searching until something is found`() = runTest {
@@ -34,9 +40,7 @@ class DiscoveryDebugViewModelTest {
         repository.setFoundDevices(tvAsChromecast, fireTv)
 
         viewModel.uiState.test {
-            awaitItem()
-
-            assertEquals(listOf(tvAsChromecast, fireTv), awaitItem().finds)
+            assertEquals(listOf(tvAsChromecast, fireTv), expectMostRecentItem().finds)
         }
     }
 
@@ -47,9 +51,7 @@ class DiscoveryDebugViewModelTest {
         repository.setFoundDevices(tvAsChromecast, tvAsDlna)
 
         viewModel.uiState.test {
-            awaitItem()
-
-            assertEquals(2, awaitItem().finds.size)
+            assertEquals(2, expectMostRecentItem().finds.size)
         }
     }
 
@@ -58,9 +60,7 @@ class DiscoveryDebugViewModelTest {
         repository.setFoundDevices(aDevice())
 
         viewModel.uiState.test {
-            awaitItem()
-
-            assertFalse(awaitItem().isSearching)
+            assertFalse(expectMostRecentItem().isSearching)
         }
     }
 
@@ -70,8 +70,7 @@ class DiscoveryDebugViewModelTest {
         val fireTv = aDevice(protocol = DeviceProtocol.FIRE_TV, host = "10.0.0.6")
         repository.setFoundDevices(chromecast, fireTv)
         viewModel.uiState.test {
-            awaitItem()
-            awaitItem()
+            expectMostRecentItem()
 
             viewModel.onImplementationFilterChosen(ImplementationFilter.IMPLEMENTED)
 
@@ -86,8 +85,7 @@ class DiscoveryDebugViewModelTest {
         val fireTv = aDevice(protocol = DeviceProtocol.FIRE_TV, host = "10.0.0.6")
         repository.setFoundDevices(chromecast, fireTv)
         viewModel.uiState.test {
-            awaitItem()
-            awaitItem()
+            expectMostRecentItem()
 
             viewModel.onProtocolFilterToggled(DeviceProtocol.FIRE_TV)
             awaitItem()
