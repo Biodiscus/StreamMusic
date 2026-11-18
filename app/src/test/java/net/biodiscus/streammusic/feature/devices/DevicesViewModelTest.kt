@@ -11,6 +11,7 @@ import net.biodiscus.streammusic.core.streaming.StreamingStateRepository
 import net.biodiscus.streammusic.testing.FakeDeviceGroupRepository
 import net.biodiscus.streammusic.testing.FakeDeviceRepository
 import net.biodiscus.streammusic.testing.FakeSettingsRepository
+import net.biodiscus.streammusic.testing.FakeProtocolChoiceRepository
 import net.biodiscus.streammusic.testing.FakeStreamingController
 import net.biodiscus.streammusic.testing.MainDispatcherRule
 import net.biodiscus.streammusic.testing.aDevice
@@ -33,6 +34,7 @@ class DevicesViewModelTest {
     private val streamingController = FakeStreamingController()
     private val groupRepository = FakeDeviceGroupRepository()
     private val settingsRepository = FakeSettingsRepository()
+    private val protocolChoiceRepository = FakeProtocolChoiceRepository()
     private lateinit var viewModel: DevicesViewModel
 
     @Before
@@ -45,7 +47,14 @@ class DevicesViewModelTest {
     private val fireTv = aDevice(name = "Fire TV", protocol = DeviceProtocol.FIRE_TV, host = "10.0.0.3")
 
     private fun createViewModelWithCurrentStreamingState() =
-        DevicesViewModel(repository, streamingState, streamingController, groupRepository, settingsRepository)
+        DevicesViewModel(
+            repository,
+            streamingState,
+            streamingController,
+            groupRepository,
+            settingsRepository,
+            protocolChoiceRepository,
+        )
 
     private val airPlay = aDevice(name = "Denon", protocol = DeviceProtocol.AIRPLAY, host = "10.0.0.5")
     private val airPlay2 = aDevice(name = "Denon", protocol = DeviceProtocol.AIRPLAY_2, host = "10.0.0.5")
@@ -532,6 +541,103 @@ class DevicesViewModelTest {
 
             val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
             assertEquals(setOf(kitchenDlna.id), uiState.selectedStreamingDeviceIds)
+        }
+    }
+
+    @Test
+    fun `clicking a group while streaming adds its devices that are not playing yet`() = runTest {
+        val group = aGroup(
+            "Downstairs",
+            aGroupMember("Kitchen", DeviceProtocol.SONOS, kitchen.host),
+            aGroupMember("Study", DeviceProtocol.DLNA, study.host),
+        )
+        repository.setFoundDevices(kitchen, study)
+        streamingState.streamingStarted(listOf(kitchen))
+        viewModel = createViewModelWithCurrentStreamingState()
+        viewModel.uiState.test {
+            awaitItem()
+
+            viewModel.onGroupClicked(group)
+
+            assertEquals(listOf(study.id), streamingController.addedDeviceIds)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `clicking a group while streaming keeps the devices that are playing`() = runTest {
+        val group = aGroup("Study only", aGroupMember("Study", DeviceProtocol.DLNA, study.host))
+        repository.setFoundDevices(kitchen, study)
+        streamingState.streamingStarted(listOf(kitchen))
+        viewModel = createViewModelWithCurrentStreamingState()
+        viewModel.uiState.test {
+            awaitItem()
+
+            viewModel.onGroupClicked(group)
+
+            val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
+            assertEquals(setOf(kitchen.host, study.host), uiState.selectedDeviceIds)
+            assertEquals(emptyList<String>(), streamingController.removedDeviceIds)
+        }
+    }
+
+    @Test
+    fun `clicking a group while idle does not touch the streaming service`() = runTest {
+        val group = aGroup("Downstairs", aGroupMember("Kitchen", DeviceProtocol.SONOS, kitchen.host))
+        repository.setFoundDevices(kitchen)
+        viewModel.uiState.test {
+            awaitItem()
+
+            viewModel.onGroupClicked(group)
+
+            assertEquals(emptyList<String>(), streamingController.addedDeviceIds)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `remembers the protocol the user chose for a device`() = runTest {
+        val kitchenDlna = aDevice(protocol = DeviceProtocol.DLNA, host = kitchen.host)
+        val device = aNetworkDevice(kitchen, kitchenDlna)
+        repository.setFoundDevices(kitchen, kitchenDlna)
+        viewModel.uiState.test {
+            awaitItem()
+
+            viewModel.onProtocolChosen(device, DeviceProtocol.DLNA)
+
+            assertEquals(mapOf(device.id to DeviceProtocol.DLNA), protocolChoiceRepository.savedChoices)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `streams with the protocol remembered from an earlier visit`() = runTest {
+        val kitchenDlna = aDevice(protocol = DeviceProtocol.DLNA, host = kitchen.host)
+        protocolChoiceRepository.savedChoices = mapOf(kitchen.host to DeviceProtocol.DLNA)
+        repository.setFoundDevices(kitchen, kitchenDlna)
+        viewModel = createViewModelWithCurrentStreamingState()
+        viewModel.uiState.test {
+            awaitItem()
+
+            viewModel.onDeviceClicked(aNetworkDevice(kitchen, kitchenDlna))
+
+            val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
+            assertEquals(setOf(kitchenDlna.id), uiState.selectedStreamingDeviceIds)
+        }
+    }
+
+    @Test
+    fun `a protocol picked through a group is not remembered`() = runTest {
+        val kitchenDlna = aDevice(protocol = DeviceProtocol.DLNA, host = kitchen.host)
+        val group = aGroup("Downstairs", aGroupMember("Kitchen", DeviceProtocol.DLNA, kitchen.host))
+        repository.setFoundDevices(kitchen, kitchenDlna)
+        viewModel.uiState.test {
+            awaitItem()
+
+            viewModel.onGroupClicked(group)
+
+            assertEquals(emptyMap<String, DeviceProtocol>(), protocolChoiceRepository.savedChoices)
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }

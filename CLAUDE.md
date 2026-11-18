@@ -54,6 +54,8 @@ core/logging/     Logging with Timber. `SessionLogTree` keeps the newest 500 lin
                   Use `Timber`, never `android.util.Log`. Streamers log protocol milestones, not packets.
 core/groups/      Saved device groups (SharedPreferences + JSON). A group is a name plus its devices (host, name, protocol).
                   Clicking one on the Devices screen selects its devices that are on the network and starts streaming.
+core/protocolchoices/  The protocol the user picked per device in the protocol dialog (SharedPreferences + JSON), loaded when the Devices screen starts.
+                  Choices made through a group are not saved.
 core/settings/    App settings (SharedPreferences): which protocols are shown (AirPlay and AirPlay 2 each have their own switch), hide single-app capture,
                   audio format per family (AAC/LPCM/WAV), AirPlay audio delay, Chromecast disconnect on mute.
                   A disabled protocol is only hidden from the Devices list; the network search still runs.

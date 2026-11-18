@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.PlayArrow
@@ -102,7 +102,7 @@ internal fun DevicesRoute(
         onDeleteGroupClicked = viewModel::onDeleteGroupClicked,
         onGroupClicked = { group, streamingDeviceIds ->
             viewModel.onGroupClicked(group)
-            startStreaming(streamingDeviceIds)
+            if (!uiState.isStreaming) startStreaming(streamingDeviceIds)
         },
         onRefreshClicked = viewModel::onRefreshClicked,
         onSettingsClicked = onSettingsClicked,
@@ -356,7 +356,10 @@ internal fun DeviceRow(
         headlineContent = { Text(device.name) },
         supportingContent = { Text(deviceDescription(device, protocolInUse, streamStatus)) },
         trailingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (streamStatus != null) StreamStatusIcon(streamStatus)
                 if (canChooseProtocol(device, streamStatus)) {
                     IconButton(onClick = onChooseProtocolClicked) {
@@ -395,7 +398,7 @@ private fun streamStatusText(status: DeviceStreamStatus): String =
 private fun StreamStatusIcon(status: DeviceStreamStatus) {
     when (status) {
         DeviceStreamStatus.Connecting -> CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-        DeviceStreamStatus.Streaming -> Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+        DeviceStreamStatus.Streaming -> Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = MaterialTheme.colorScheme.primary)
         is DeviceStreamStatus.Failed -> Icon(Icons.Filled.ErrorOutline, null, tint = MaterialTheme.colorScheme.error)
     }
 }

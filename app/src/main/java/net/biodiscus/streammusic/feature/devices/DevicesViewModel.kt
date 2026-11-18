@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import net.biodiscus.streammusic.core.discovery.DeviceRepository
 import net.biodiscus.streammusic.core.groups.DeviceGroupRepository
+import net.biodiscus.streammusic.core.protocolchoices.ProtocolChoiceRepository
 import net.biodiscus.streammusic.core.model.AppSettings
 import net.biodiscus.streammusic.core.model.DeviceGroup
 import net.biodiscus.streammusic.core.model.DeviceGroupColor
@@ -41,10 +42,11 @@ internal class DevicesViewModel @Inject constructor(
     private val streamingController: StreamingController,
     private val deviceGroupRepository: DeviceGroupRepository,
     private val settingsRepository: SettingsRepository,
+    private val protocolChoiceRepository: ProtocolChoiceRepository,
 ) : ViewModel() {
 
     private val selectedDeviceIds = MutableStateFlow(deviceIdsInStream(streamingStateRepository.state.value))
-    private val chosenProtocolByDeviceId = MutableStateFlow<Map<String, DeviceProtocol>>(emptyMap())
+    private val chosenProtocolByDeviceId = MutableStateFlow(protocolChoiceRepository.load())
     private val searchNumber = MutableStateFlow(0)
 
     val uiState: StateFlow<DevicesUiState> =
@@ -79,6 +81,7 @@ internal class DevicesViewModel @Inject constructor(
 
     fun onProtocolChosen(device: NetworkDevice, protocol: DeviceProtocol) {
         chosenProtocolByDeviceId.update { chosen -> chosen + (device.id to protocol) }
+        protocolChoiceRepository.save(device.id, protocol)
     }
 
     fun onSaveGroupClicked(name: String, icon: DeviceGroupIcon, color: DeviceGroupColor) {
@@ -103,13 +106,17 @@ internal class DevicesViewModel @Inject constructor(
         deviceGroupRepository.deleteGroup(group.name)
     }
 
-    /** Selects exactly the devices of the group that are on the network, each with the protocol saved in the group. */
+    /**
+     * While idle, selects exactly the devices of the group that are on the network. While streaming, adds the
+     * devices of the group that are not in the stream yet and leaves the devices that are playing alone.
+     */
     fun onGroupClicked(group: DeviceGroup) {
         val foundDevices = uiState.value as? DevicesUiState.DevicesFound ?: return
         val groupOptions = foundDevices.streamingOptionsOf(group)
-        selectedDeviceIds.value = groupOptions.map { option -> option.host }.toSet()
-        chosenProtocolByDeviceId.update { chosen ->
-            chosen + groupOptions.associate { option -> option.host to option.protocol }
+        if (isStreaming()) {
+            addToRunningStream(groupOptions)
+        } else {
+            selectOnly(groupOptions)
         }
     }
 
@@ -130,6 +137,24 @@ internal class DevicesViewModel @Inject constructor(
             startStreamingTo(device)
         } else {
             stopStreamingTo(device)
+        }
+    }
+
+    private fun selectOnly(options: List<StreamingDevice>) {
+        selectedDeviceIds.value = options.map { option -> option.host }.toSet()
+        rememberProtocolsOf(options)
+    }
+
+    private fun addToRunningStream(options: List<StreamingDevice>) {
+        val optionsNotInStream = options.filter { option -> option.host !in selectedDeviceIds.value }
+        selectedDeviceIds.update { selected -> selected + optionsNotInStream.map { option -> option.host } }
+        rememberProtocolsOf(optionsNotInStream)
+        optionsNotInStream.forEach { option -> streamingController.addDevice(option.id) }
+    }
+
+    private fun rememberProtocolsOf(options: List<StreamingDevice>) {
+        chosenProtocolByDeviceId.update { chosen ->
+            chosen + options.associate { option -> option.host to option.protocol }
         }
     }
 

@@ -29,8 +29,7 @@ internal sealed interface DevicesUiState {
     ) : DevicesUiState {
         val selectedCount: Int = selectedDeviceIds.size
 
-        /** Starting a group only makes sense while nothing is streaming, because it replaces the selection. */
-        val showsGroups: Boolean = groups.isNotEmpty() && !isStreaming
+        val showsGroups: Boolean = groups.isNotEmpty()
 
         private val selectedStreamingOptions: List<StreamingDevice> =
             devices

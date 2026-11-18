@@ -159,10 +159,10 @@ class DevicesUiStateTest {
     }
 
     @Test
-    fun `groups are hidden while streaming`() {
+    fun `groups are shown while streaming`() {
         val uiState = DevicesUiState.DevicesFound(emptyList(), emptySet(), groups = listOf(aGroup()), isStreaming = true)
 
-        assertEquals(false, uiState.showsGroups)
+        assertEquals(true, uiState.showsGroups)
     }
 
     @Test
