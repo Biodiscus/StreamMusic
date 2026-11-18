@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import net.biodiscus.streammusic.core.discovery.DeviceRepository
 import net.biodiscus.streammusic.core.model.StreamingDevice
 import net.biodiscus.streammusic.core.streaming.StreamingSession
+import net.biodiscus.streammusic.core.streaming.StoppedBecauseOfSilenceException
 import net.biodiscus.streammusic.core.streaming.StreamingSessionFactory
 import net.biodiscus.streammusic.core.streaming.capture.PlaybackAudioCapture
 import timber.log.Timber
@@ -125,6 +126,8 @@ class StreamingService : Service() {
             session()
         } catch (cancellation: CancellationException) {
             throw cancellation
+        } catch (silence: StoppedBecauseOfSilenceException) {
+            Timber.i(silence, "Streaming stopped by itself")
         } catch (failure: Exception) {
             Timber.e(failure, "Streaming stopped because of an error")
         } finally {

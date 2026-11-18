@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import net.biodiscus.streammusic.core.model.DeviceProtocol
 import net.biodiscus.streammusic.core.model.StreamAudioFormat
+import net.biodiscus.streammusic.core.streaming.device.DeviceEndedOnPurposeException
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
 import net.biodiscus.streammusic.testing.FakeHttpAudioStream
 import net.biodiscus.streammusic.testing.aDevice
@@ -101,6 +102,15 @@ class ChromecastDeviceStreamerTest {
     }
 
     @Test
+    fun `being muted on purpose ends the device on purpose`() = runTest {
+        channel.receives(receiverStatusWithMediaPlayer, playingMediaStatus, receiverStatusWithVolume(isMuted = false), receiverStatusWithVolume(isMuted = true))
+
+        val result = runCatching { streamerThatDisconnectsOnMute().stream {} }
+
+        assertTrue(result.exceptionOrNull() is DeviceEndedOnPurposeException)
+    }
+
+    @Test
     fun `keeps streaming when the Chromecast is muted and disconnecting on mute is off`() = runTest {
         var streaming = false
         channel.receives(receiverStatusWithMediaPlayer, playingMediaStatus, receiverStatusWithVolume(isMuted = false), receiverStatusWithVolume(isMuted = true))
@@ -177,6 +187,36 @@ class ChromecastDeviceStreamerTest {
         val result = runCatching { streamer.stream {} }
 
         assertEquals("Chromecast stopped playing: ERROR", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `a person stopping the player ends the device on purpose`() = runTest {
+        val cancelledByPerson = mediaStatus("""{"playerState":"IDLE","idleReason":"CANCELLED"}""")
+        channel.receives(receiverStatusWithMediaPlayer, playingMediaStatus, cancelledByPerson)
+
+        val result = runCatching { streamer.stream {} }
+
+        assertTrue(result.exceptionOrNull() is DeviceEndedOnPurposeException)
+    }
+
+    @Test
+    fun `something else being sent to the Chromecast ends the device on purpose`() = runTest {
+        val interrupted = mediaStatus("""{"playerState":"IDLE","idleReason":"INTERRUPTED"}""")
+        channel.receives(receiverStatusWithMediaPlayer, playingMediaStatus, interrupted)
+
+        val result = runCatching { streamer.stream {} }
+
+        assertTrue(result.exceptionOrNull() is DeviceEndedOnPurposeException)
+    }
+
+    @Test
+    fun `a player that goes idle with an error does not end the device on purpose`() = runTest {
+        val idleWithError = mediaStatus("""{"playerState":"IDLE","idleReason":"ERROR"}""")
+        channel.receives(receiverStatusWithMediaPlayer, playingMediaStatus, idleWithError)
+
+        val result = runCatching { streamer.stream {} }
+
+        assertFalse(result.exceptionOrNull() is DeviceEndedOnPurposeException)
     }
 
     private val receiverStatusWithMediaPlayer = CastMessage(

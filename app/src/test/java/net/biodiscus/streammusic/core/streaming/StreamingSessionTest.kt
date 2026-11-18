@@ -4,22 +4,28 @@ import java.io.IOException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import net.biodiscus.streammusic.core.model.DeviceProtocol
+import net.biodiscus.streammusic.core.model.AppSettings
 import net.biodiscus.streammusic.core.model.DeviceStreamStatus
 import net.biodiscus.streammusic.core.model.ProtocolFamily
+import net.biodiscus.streammusic.core.model.SilenceTimeout
 import net.biodiscus.streammusic.core.model.StreamAudioFormat
 import net.biodiscus.streammusic.core.model.StreamingDevice
 import net.biodiscus.streammusic.core.model.StreamingState
+import net.biodiscus.streammusic.core.streaming.device.DeviceEndedOnPurposeException
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamer
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamerFactory
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
@@ -162,6 +168,183 @@ class StreamingSessionTest {
     }
 
     @Test
+    fun `leaves the phone volume alone when muting the phone is off`() = runTest {
+        settings.setMutesPhoneWhileStreaming(false)
+        streamers.streamsSuccessfully(kitchen)
+
+        val job = startSession(kitchen)
+
+        assertEquals(7, phoneVolume.level)
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `a device that loses its connection while streaming shows as connecting until it connects again`() = runTest {
+        streamers.dropsOnceThenStreams(kitchen)
+
+        val job = startSession(kitchen)
+
+        assertEquals(DeviceStreamStatus.Connecting, statusOf(kitchen))
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `a device that loses its connection while streaming is connected again`() = runTest {
+        streamers.dropsOnceThenStreams(kitchen)
+        val job = startSession(kitchen)
+
+        advanceUntilIdle()
+
+        assertEquals(DeviceStreamStatus.Streaming, statusOf(kitchen))
+        assertEquals(2, streamers.connectionAttemptsOf(kitchen))
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `a device that cannot be connected again is tried three more times and then fails`() = runTest {
+        streamers.streamsOnceThenCannotConnect(kitchen, IOException("Connection refused"))
+        val job = startSession(kitchen)
+
+        advanceUntilIdle()
+
+        assertEquals(1 + MAX_RECONNECTS_IN_A_ROW, streamers.connectionAttemptsOf(kitchen))
+        assertEquals(DeviceStreamStatus.Failed("Connection refused"), statusOf(kitchen))
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `a device that loses its connection fails when reconnecting is off`() = runTest {
+        settings.setReconnectsDroppedDevices(false)
+        streamers.dropsOnceThenStreams(kitchen)
+        val job = startSession(kitchen)
+
+        advanceUntilIdle()
+
+        assertEquals(1, streamers.connectionAttemptsOf(kitchen))
+        assertEquals(DeviceStreamStatus.Failed("Connection lost"), statusOf(kitchen))
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `a device that never streamed is not connected again`() = runTest {
+        streamers.fails(kitchen, IOException("Connection refused"))
+        val job = startSession(kitchen)
+
+        advanceUntilIdle()
+
+        assertEquals(1, streamers.connectionAttemptsOf(kitchen))
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `a device that ended on purpose is not connected again`() = runTest {
+        streamers.streamsThenEndsOnPurpose(kitchen, DeviceEndedOnPurposeException("Chromecast was muted"))
+        val job = startSession(kitchen)
+
+        advanceUntilIdle()
+
+        assertEquals(1, streamers.connectionAttemptsOf(kitchen))
+        assertEquals(DeviceStreamStatus.Failed("Chromecast was muted"), statusOf(kitchen))
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `a device that is waiting to connect again can be removed`() = runTest {
+        streamers.dropsOnceThenStreams(kitchen)
+        val job = startSession(kitchen)
+
+        session.removeDevice(kitchen.id)
+        advanceUntilIdle()
+
+        assertEquals(1, streamers.connectionAttemptsOf(kitchen))
+        assertEquals(emptyList<StreamingDevice>(), devicesInState())
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `ends with a silence exception when the phone plays nothing for the chosen time`() = runTest {
+        settings.setStopsStreamingAfterSilence(SilenceTimeout.FIVE_MINUTES)
+        streamers.streamsSuccessfully(kitchen)
+        createSession(kitchen, capturedPcm = framesForMinutes(minutes = 6, frame = SILENT_FRAME))
+
+        val outcome = async { runCatching { session.run() } }
+        advanceUntilIdle()
+
+        assertTrue(outcome.isCompleted)
+        assertTrue(outcome.await().exceptionOrNull() is StoppedBecauseOfSilenceException)
+    }
+
+    @Test
+    fun `gives the phone its volume back when the session ends because of silence`() = runTest {
+        settings.setStopsStreamingAfterSilence(SilenceTimeout.FIVE_MINUTES)
+        streamers.streamsSuccessfully(kitchen)
+        createSession(kitchen, capturedPcm = framesForMinutes(minutes = 6, frame = SILENT_FRAME))
+
+        val outcome = async { runCatching { session.run() } }
+        advanceUntilIdle()
+
+        assertTrue(outcome.isCompleted)
+        assertEquals(7, phoneVolume.level)
+    }
+
+    @Test
+    fun `keeps streaming while the phone plays sound`() = runTest {
+        settings.setStopsStreamingAfterSilence(SilenceTimeout.FIVE_MINUTES)
+        streamers.streamsSuccessfully(kitchen)
+        createSession(kitchen, capturedPcm = framesForMinutes(minutes = 6, frame = LOUD_FRAME))
+
+        val outcome = async { runCatching { session.run() } }
+        advanceUntilIdle()
+
+        assertFalse(outcome.isCompleted)
+        outcome.cancelAndJoin()
+    }
+
+    @Test
+    fun `keeps streaming silence when stopping on silence is off`() = runTest {
+        streamers.streamsSuccessfully(kitchen)
+        createSession(kitchen, capturedPcm = framesForMinutes(minutes = 6, frame = SILENT_FRAME))
+
+        val outcome = async { runCatching { session.run() } }
+        advanceUntilIdle()
+
+        assertFalse(outcome.isCompleted)
+        outcome.cancelAndJoin()
+    }
+
+    @Test
+    fun `reconnects only a device that was streaming, is allowed to and has attempts left`() {
+        val settings = AppSettings()
+        val failure = IOException("Connection lost")
+
+        assertTrue(shouldReconnect(settings, failure, hasStreamedBefore = true, reconnectsLeft = 1))
+    }
+
+    @Test
+    fun `does not reconnect when the user turned it off`() {
+        val settings = AppSettings(reconnectsDroppedDevices = false)
+
+        assertFalse(shouldReconnect(settings, IOException(), hasStreamedBefore = true, reconnectsLeft = 1))
+    }
+
+    @Test
+    fun `does not reconnect a device that never streamed`() {
+        assertFalse(shouldReconnect(AppSettings(), IOException(), hasStreamedBefore = false, reconnectsLeft = 1))
+    }
+
+    @Test
+    fun `does not reconnect when no attempts are left`() {
+        assertFalse(shouldReconnect(AppSettings(), IOException(), hasStreamedBefore = true, reconnectsLeft = 0))
+    }
+
+    @Test
+    fun `does not reconnect a device that ended on purpose`() {
+        val failure = DeviceEndedOnPurposeException("Chromecast was muted")
+
+        assertFalse(shouldReconnect(AppSettings(), failure, hasStreamedBefore = true, reconnectsLeft = 1))
+    }
+
+    @Test
     fun `a device added while streaming starts streaming`() = runTest {
         streamers.streamsSuccessfully(kitchen, study)
         val job = startSession(kitchen)
@@ -291,13 +474,30 @@ class StreamingSessionTest {
         vararg devices: StreamingDevice,
         dispatcher: CoroutineDispatcher = StandardTestDispatcher(testScheduler),
     ): Job {
-        val capturedPcm: Flow<ByteArray> = flow { awaitCancellation() }
-        session = StreamingSession(
-            devices.toList(), capturedPcm, streamers, httpStarter, stateRepository, phoneVolume, settings, dispatcher,
-        )
+        createSession(*devices, dispatcher = dispatcher)
         val job = launch { session.run() }
         runCurrent()
         return job
+    }
+
+    private fun TestScope.createSession(
+        vararg devices: StreamingDevice,
+        capturedPcm: Flow<ByteArray> = flow { awaitCancellation() },
+        dispatcher: CoroutineDispatcher = StandardTestDispatcher(testScheduler),
+    ) {
+        session = StreamingSession(
+            devices.toList(), capturedPcm, streamers, httpStarter, stateRepository, phoneVolume, settings, dispatcher,
+        )
+    }
+
+    /** One frame every 20 ms, like the real capture, and then nothing more. */
+    private fun framesForMinutes(minutes: Int, frame: ByteArray): Flow<ByteArray> = flow {
+        val frameCount = minutes * 60 * 1000 / PcmFormat.FRAME_DURATION_MILLIS
+        repeat(frameCount) {
+            emit(frame)
+            delay(PcmFormat.FRAME_DURATION_MILLIS.toLong())
+        }
+        awaitCancellation()
     }
 
     private fun statusOf(device: StreamingDevice): DeviceStreamStatus? =
@@ -307,7 +507,11 @@ class StreamingSessionTest {
         (stateRepository.state.value as StreamingState.Active).devices
 }
 
+private val SILENT_FRAME = ByteArray(4)
+private val LOUD_FRAME = byteArrayOf(0, 100, 0, 100)
+
 private class FakeStreamerFactory : DeviceStreamerFactory {
+    private val attemptsByDeviceId = mutableMapOf<String, Int>()
     private val behaviorByDeviceId = mutableMapOf<String, suspend (() -> Unit) -> Nothing>()
     private val stoppedDeviceIds = mutableListOf<String>()
     private val dispatcherByDeviceId = mutableMapOf<String, ContinuationInterceptor?>()
@@ -337,12 +541,38 @@ private class FakeStreamerFactory : DeviceStreamerFactory {
         devices.forEach { device -> behaviorByDeviceId[device.id] = { awaitCancellation() } }
     }
 
+    fun connectionAttemptsOf(device: StreamingDevice): Int = attemptsByDeviceId[device.id] ?: 0
+
+    fun dropsOnceThenStreams(device: StreamingDevice) {
+        behaviorByDeviceId[device.id] = { onStreaming ->
+            onStreaming()
+            if (connectionAttemptsOf(device) == 1) throw IOException("Connection lost")
+            awaitCancellation()
+        }
+    }
+
+    fun streamsOnceThenCannotConnect(device: StreamingDevice, error: Exception) {
+        behaviorByDeviceId[device.id] = { onStreaming ->
+            if (connectionAttemptsOf(device) > 1) throw error
+            onStreaming()
+            throw IOException("Connection lost")
+        }
+    }
+
+    fun streamsThenEndsOnPurpose(device: StreamingDevice, error: DeviceEndedOnPurposeException) {
+        behaviorByDeviceId[device.id] = { onStreaming ->
+            onStreaming()
+            throw error
+        }
+    }
+
     fun fails(device: StreamingDevice, error: Exception) {
         behaviorByDeviceId[device.id] = { throw error }
     }
 
     override fun create(device: StreamingDevice, audio: SessionAudio): DeviceStreamer {
         val behavior = behaviorByDeviceId.getValue(device.id)
+        attemptsByDeviceId[device.id] = connectionAttemptsOf(device) + 1
         return object : DeviceStreamer {
             override suspend fun stream(onStreaming: () -> Unit): Nothing =
                 try {

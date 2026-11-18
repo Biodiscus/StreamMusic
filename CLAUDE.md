@@ -57,8 +57,11 @@ core/groups/      Saved device groups (SharedPreferences + JSON). A group is a n
 core/protocolchoices/  The protocol the user picked per device in the protocol dialog (SharedPreferences + JSON), loaded when the Devices screen starts.
                   Choices made through a group are not saved.
 core/settings/    App settings (SharedPreferences): which protocols are shown (AirPlay and AirPlay 2 each have their own switch), hide single-app capture,
-                  audio format per family (AAC/LPCM/WAV), AirPlay audio delay, Chromecast disconnect on mute.
+                  audio format per family (AAC/LPCM/WAV), AirPlay audio delay, Chromecast disconnect on mute, theme (system/light/dark),
+                  mute the phone while streaming, reconnect dropped devices, AAC quality (128/192/256 kbps), stop streaming after N minutes of silence.
                   A disabled protocol is only hidden from the Devices list; the network search still runs.
+                  The streaming settings are read when a session (or its HTTP stream) starts, except "reconnect", which is read when a device drops.
+                  "Reset all data" (bottom of the Settings screen) resets the settings, deletes all groups and forgets the protocol choices.
 core/streaming/   Sending audio.
   capture/        PlaybackAudioCapture: AudioRecord + MediaProjection -> 20 ms PCM frames.
   aac/            AacEncoder (MediaCodec), AdtsHeader.
@@ -67,7 +70,10 @@ core/streaming/   Sending audio.
                   `airplay/` holds AirPlay 1 and what both generations share (RTSP messages, RTP/sync/timing packets,
                   resampling, sockets, ChaCha20-Poly1305, encrypted streams). `airplay2/` depends on `airplay/`.
   StreamingSession          Runs one session: shares the audio, starts the streamers, tracks per-device status.
-                            Devices can be added and removed while it runs.
+                            Devices can be added and removed while it runs. A device that was streaming and then fails is
+                            started again up to 3 times in a row (3 s apart), unless the user turned that off or the device
+                            ended on purpose. It ends with `StoppedBecauseOfSilenceException` after the silence timeout
+                            (`SilenceDetector` counts silent 20 ms frames).
   StreamingStateRepository  What the screens observe about the (service-owned) session.
   StreamingController       What screens ask of the running service: add a device, remove a device, stop.
   service/        StreamingService (foreground service), StreamingNotification, StreamingRequest (Intent packing).
@@ -112,6 +118,9 @@ A device that is reachable by two methods of the same protocol is one `Streaming
 ### Contracts that matter
 
 - **`DeviceStreamer.stream(onStreaming): Nothing`** never returns. Cancelling the coroutine stops the device (cleanup runs in `finally` with `NonCancellable`). An exception means that device failed. `StreamingSession` catches it per device, so one failing device never stops the others.
+- **`DeviceEndedOnPurposeException`** (an `IOException`) is what a streamer throws when the device stopped because someone chose that
+  (Chromecast muted with "disconnect on mute", or a person stopped/replaced the Chromecast player). It is a failure like any other,
+  but the session never reconnects it, so the app does not fight the user.
 - **A running session changes through `addDevice` / `removeDevice`**, which queue the change. The session applies them one at a time, so its bookkeeping needs no locks. The Devices screen keeps its ticked devices equal to the session's devices while streaming.
 - **`StreamingSession.run()` switches to `Dispatchers.IO` itself.** The service calls it from the main thread, where every socket call throws `NetworkOnMainThreadException`. Any new code that touches the network must run under it or on `Dispatchers.IO`.
 - **Discovery flows run only while collected.** `DevicesViewModel` collects them while the Devices screen is visible. Blocking socket reads are unblocked by closing the socket in `awaitClose`, because cancellation does not interrupt them.
@@ -130,6 +139,10 @@ A device that is reachable by two methods of the same protocol is one `Streaming
 - A Sonos speaker that is a non-coordinator member of a group refuses to play. This is not handled.
 - Plain DLNA renderers must be able to play AAC (ADTS) streams.
 - The WAV and LPCM stream formats, the AirPlay audio delay and the Chromecast "disconnect on mute" setting are covered by unit tests only, not yet tried on real devices. Sonos with WAV goes through the `x-rincon-mp3radio://` scheme and may refuse it. The AirPlay delay is sent as a later start of the RTP timeline, and the phone holds the audio back until then.
+- Reconnecting only works for streamers that notice a dropped device: AirPlay, AirPlay 2, AriaCast and Chromecast. `UpnpDeviceStreamer`
+  (Sonos, DLNA, HEOS, Samsung Multiroom) waits after `Play` and never sees a drop. A device that streams and drops over and over keeps being
+  reconnected, because every attempt that reaches "streaming" resets the 3-attempt budget.
+- The silence timeout also counts apps that opt out of capture (their audio arrives as silence).
 - Disconnect on mute ends that device as "failed" with the reason "Chromecast was muted", because a device can only stop by failing.
 - AirPlay 1 and AirPlay 2 are verified with unit tests and with local loopback receivers (AirPlay 2 against an independent Python one built on srptools, cryptography and plistlib), not yet with real speakers. The RAOP key, SRP maths, HKDF, ChaCha20-Poly1305 and plist code are checked against reference libraries (see the test names). AirPlay 2 uses NTP timing, not PTP, and no volume or metadata messages. Receivers that need a pairing code on screen (HomePod set up with a code, Apple TV) are not supported. The phone's capture clock and the receiver's clock are not tied together, so very long sessions can drift.
 - Pairing with a random SRP key fails about once in 256 times when the key starts with a zero byte, as in pyatv. Starting the stream again works.

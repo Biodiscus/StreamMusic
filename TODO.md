@@ -10,4 +10,4 @@
 
 - [ ] Improve the design a bit?
 
-- [ ] Get more settings for all the providers and set them in the config
+- [X] Get more settings for all the providers and set them in the config

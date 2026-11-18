@@ -115,4 +115,45 @@ class AppSettingsTest {
 
         assertTrue(families.all { family -> StreamAudioFormat.AAC in family.selectableAudioFormats })
     }
+
+    @Test
+    fun `the phone is muted while streaming by default`() {
+        assertTrue(AppSettings().mutesPhoneWhileStreaming)
+    }
+
+    @Test
+    fun `dropped devices are reconnected by default`() {
+        assertTrue(AppSettings().reconnectsDroppedDevices)
+    }
+
+    @Test
+    fun `streaming never stops by itself by default`() {
+        assertFalse(AppSettings().stopsStreamingAfterSilence.isOn())
+    }
+
+    @Test
+    fun `the AAC stream has the standard quality by default`() {
+        assertEquals(AacQuality.STANDARD, AppSettings().aacQuality)
+    }
+
+    @Test
+    fun `a timeout of five minutes is on`() {
+        assertTrue(SilenceTimeout.FIVE_MINUTES.isOn())
+    }
+
+    @Test
+    fun `the system theme follows the system`() {
+        assertTrue(ThemeMode.SYSTEM.usesDarkTheme(isSystemDark = true))
+        assertFalse(ThemeMode.SYSTEM.usesDarkTheme(isSystemDark = false))
+    }
+
+    @Test
+    fun `the light theme is light even when the system is dark`() {
+        assertFalse(ThemeMode.LIGHT.usesDarkTheme(isSystemDark = true))
+    }
+
+    @Test
+    fun `the dark theme is dark even when the system is light`() {
+        assertTrue(ThemeMode.DARK.usesDarkTheme(isSystemDark = false))
+    }
 }

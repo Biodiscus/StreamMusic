@@ -596,6 +596,23 @@ class DevicesViewModelTest {
     }
 
     @Test
+    fun `forgets the protocol the user chose when the remembered choices are cleared`() = runTest {
+        val kitchenDlna = aDevice(protocol = DeviceProtocol.DLNA, host = kitchen.host)
+        val device = aNetworkDevice(kitchen, kitchenDlna)
+        repository.setFoundDevices(kitchen, kitchenDlna)
+        viewModel.uiState.test {
+            awaitItem()
+            viewModel.onProtocolChosen(device, DeviceProtocol.DLNA)
+            awaitItem()
+
+            protocolChoiceRepository.clear()
+
+            val uiState = expectMostRecentItem() as DevicesUiState.DevicesFound
+            assertEquals(emptyMap<String, DeviceProtocol>(), uiState.chosenProtocolByDeviceId)
+        }
+    }
+
+    @Test
     fun `remembers the protocol the user chose for a device`() = runTest {
         val kitchenDlna = aDevice(protocol = DeviceProtocol.DLNA, host = kitchen.host)
         val device = aNetworkDevice(kitchen, kitchenDlna)

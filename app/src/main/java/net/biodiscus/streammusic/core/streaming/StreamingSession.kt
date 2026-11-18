@@ -10,20 +10,26 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.biodiscus.streammusic.core.logging.describeForLog
+import net.biodiscus.streammusic.core.model.AppSettings
 import net.biodiscus.streammusic.core.model.DeviceStreamStatus
+import net.biodiscus.streammusic.core.model.SilenceTimeout
 import net.biodiscus.streammusic.core.model.StreamAudioFormat
 import net.biodiscus.streammusic.core.model.audioFormatFor
+import net.biodiscus.streammusic.core.model.isOn
 import net.biodiscus.streammusic.core.model.StreamTransport
 import net.biodiscus.streammusic.core.model.StreamingDevice
 import net.biodiscus.streammusic.core.settings.SettingsRepository
+import net.biodiscus.streammusic.core.streaming.device.DeviceEndedOnPurposeException
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamerFactory
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
 import net.biodiscus.streammusic.core.streaming.http.HttpAudioStreamStarter
@@ -31,6 +37,8 @@ import net.biodiscus.streammusic.core.streaming.http.RunningHttpAudioStream
 import timber.log.Timber
 
 private const val PCM_FRAMES_KEPT_PER_LISTENER = 100
+internal const val MAX_RECONNECTS_IN_A_ROW = 3
+internal const val RECONNECT_DELAY_MILLIS = 3_000L
 
 internal class StreamingSessionFactory @Inject constructor(
     private val streamerFactory: DeviceStreamerFactory,
@@ -55,8 +63,10 @@ internal class StreamingSessionFactory @Inject constructor(
  * Sends one captured audio stream to several devices at once.
  * A device that fails is marked as failed and does not affect the other devices.
  * Devices can join and leave while the session runs, so the user does not have to pick the audio again.
- * The phone itself is silent while the session runs, so the user can watch other content. The volume the
- * user had comes back when the session ends.
+ * The phone itself is silent while the session runs (unless the user turned that off), so the user can watch other
+ * content. The volume the user had comes back when the session ends.
+ * A device that was streaming and loses its connection is connected again a few times, if the user allows it.
+ * The session ends with [StoppedBecauseOfSilenceException] when the phone plays nothing for the time the user chose.
  */
 internal class StreamingSession(
     private val initialDevices: List<StreamingDevice>,
@@ -92,14 +102,16 @@ internal class StreamingSession(
     suspend fun run(): Nothing = withContext(dispatcher) { streamUntilCancelled() }
 
     private suspend fun streamUntilCancelled(): Nothing = coroutineScope {
+        val settings = settingsRepository.currentSettings
         stateRepository.streamingStarted(initialDevices)
         val pcmFrames = sharePcmFrames(scope = this)
-        val volumeBeforeStreaming = silencePhone()
+        val volumeToRestore = if (settings.mutesPhoneWhileStreaming) silencePhone() else null
         try {
+            stopWhenAudioStaysSilent(settings.stopsStreamingAfterSilence, scope = this, pcmFrames)
             initialDevices.forEach { device -> startStreamingTo(device, scope = this, pcmFrames) }
             applyDeviceChanges(scope = this, pcmFrames)
         } finally {
-            phoneMusicVolume.level = volumeBeforeStreaming
+            if (volumeToRestore != null) phoneMusicVolume.level = volumeToRestore
             httpStreamsByFormat.values.forEach { stream -> stream.stop() }
             stateRepository.streamingEnded()
         }
@@ -133,6 +145,16 @@ internal class StreamingSession(
         return volumeBeforeStreaming
     }
 
+    private fun stopWhenAudioStaysSilent(timeout: SilenceTimeout, scope: CoroutineScope, pcmFrames: Flow<ByteArray>) {
+        if (!timeout.isOn()) return
+        scope.launch {
+            val detector = SilenceDetector(timeout)
+            pcmFrames.first { pcmFrame -> detector.hasBeenSilentTooLong(pcmFrame) }
+            Timber.i("Stopping, because the phone played nothing for %d minutes", timeout.minutes)
+            throw StoppedBecauseOfSilenceException(timeout)
+        }
+    }
+
     /** Slow listeners lose their oldest frames instead of holding up the recording. */
     private fun sharePcmFrames(scope: CoroutineScope): SharedFlow<ByteArray> =
         capturedPcm
@@ -152,17 +174,47 @@ internal class StreamingSession(
     }
 
     private suspend fun streamToDevice(device: StreamingDevice, audio: SessionAudio) {
-        Timber.i("Connecting to %s", device.describeForLog())
+        var reconnectsLeft = MAX_RECONNECTS_IN_A_ROW
+        var hasStreamedBefore = false
         stateRepository.deviceStatusChanged(device.id, DeviceStreamStatus.Connecting)
+        while (true) {
+            Timber.i("Connecting to %s", device.describeForLog())
+            val attempt = streamUntilItFails(device, audio)
+            if (attempt.reachedStreaming) {
+                hasStreamedBefore = true
+                reconnectsLeft = MAX_RECONNECTS_IN_A_ROW
+            }
+            val settings = settingsRepository.currentSettings
+            if (!shouldReconnect(settings, attempt.failure, hasStreamedBefore, reconnectsLeft)) {
+                markFailed(device, attempt.failure)
+                return
+            }
+            reconnectsLeft--
+            Timber.w(attempt.failure, "Lost %s, connecting again", device.describeForLog())
+            stateRepository.deviceStatusChanged(device.id, DeviceStreamStatus.Connecting)
+            delay(RECONNECT_DELAY_MILLIS)
+        }
+    }
+
+    /** Returns when the device fails. Cancellation stops the device and is not a failure. */
+    private suspend fun streamUntilItFails(device: StreamingDevice, audio: SessionAudio): StreamAttempt {
+        var reachedStreaming = false
         try {
-            streamerFactory.create(device, audio).stream(onStreaming = { markStreaming(device) })
+            streamerFactory.create(device, audio).stream(onStreaming = {
+                reachedStreaming = true
+                markStreaming(device)
+            })
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (failure: Exception) {
-            Timber.e(failure, "Streaming to %s failed", device.describeForLog())
-            val reason = failure.message ?: failure.javaClass.simpleName
-            stateRepository.deviceStatusChanged(device.id, DeviceStreamStatus.Failed(reason))
+            return StreamAttempt(failure, reachedStreaming)
         }
+    }
+
+    private fun markFailed(device: StreamingDevice, failure: Exception) {
+        Timber.e(failure, "Streaming to %s failed", device.describeForLog())
+        val reason = failure.message ?: failure.javaClass.simpleName
+        stateRepository.deviceStatusChanged(device.id, DeviceStreamStatus.Failed(reason))
     }
 
     private fun markStreaming(device: StreamingDevice) {
@@ -175,3 +227,20 @@ private sealed interface DeviceChange {
     data class Add(val device: StreamingDevice) : DeviceChange
     data class Remove(val deviceId: String) : DeviceChange
 }
+
+private class StreamAttempt(val failure: Exception, val reachedStreaming: Boolean)
+
+/**
+ * Only a device that was streaming is connected again: one that never played has a problem that trying again
+ * will not solve. A device that stopped on purpose stays stopped.
+ */
+internal fun shouldReconnect(
+    settings: AppSettings,
+    failure: Exception,
+    hasStreamedBefore: Boolean,
+    reconnectsLeft: Int,
+): Boolean =
+    settings.reconnectsDroppedDevices &&
+        hasStreamedBefore &&
+        reconnectsLeft > 0 &&
+        failure !is DeviceEndedOnPurposeException

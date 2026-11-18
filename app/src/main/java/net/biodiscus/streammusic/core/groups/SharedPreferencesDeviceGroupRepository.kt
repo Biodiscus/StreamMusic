@@ -43,6 +43,11 @@ internal class SharedPreferencesDeviceGroupRepository @Inject constructor(
         writeToPreferences()
     }
 
+    override fun deleteAllGroups() {
+        groups.value = emptyList()
+        writeToPreferences()
+    }
+
     private fun writeToPreferences() {
         preferences.edit().putString(GROUPS_KEY, encodeDeviceGroups(groups.value)).apply()
     }

@@ -7,12 +7,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import net.biodiscus.streammusic.core.streaming.PcmFormat
 
-private const val AAC_BIT_RATE = 192_000
 private const val INPUT_WAIT_MICROS = 10_000L
 private const val MICROS_PER_MILLI = 1_000L
 
 /** Turns raw PCM frames into a live AAC stream with an ADTS header in front of every frame. */
-internal class AacEncoder {
+internal class AacEncoder(private val bitsPerSecond: Int) {
 
     fun encode(pcmFrames: Flow<ByteArray>): Flow<ByteArray> = flow {
         val codec = createStartedCodec()
@@ -36,7 +35,7 @@ internal class AacEncoder {
             PcmFormat.CHANNEL_COUNT,
         )
         format.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
-        format.setInteger(MediaFormat.KEY_BIT_RATE, AAC_BIT_RATE)
+        format.setInteger(MediaFormat.KEY_BIT_RATE, bitsPerSecond)
         format.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, PcmFormat.BYTES_PER_FRAME)
 
         val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)

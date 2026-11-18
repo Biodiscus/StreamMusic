@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.launch
 import net.biodiscus.streammusic.core.model.StreamAudioFormat
+import net.biodiscus.streammusic.core.settings.SettingsRepository
 import net.biodiscus.streammusic.core.streaming.aac.AacEncoder
 import timber.log.Timber
 
@@ -24,7 +25,9 @@ private const val REQUEST_READ_TIMEOUT_MILLIS = 5_000
 private const val AUDIO_FRAMES_KEPT_PER_LISTENER = 100
 
 /** Encodes PCM to the format once and serves it to every device that connects, like an internet radio station. */
-internal class HttpAudioStreamServerStarter @Inject constructor() : HttpAudioStreamStarter {
+internal class HttpAudioStreamServerStarter @Inject constructor(
+    private val settingsRepository: SettingsRepository,
+) : HttpAudioStreamStarter {
     override fun start(scope: CoroutineScope, pcmFrames: Flow<ByteArray>, format: StreamAudioFormat): RunningHttpAudioStream {
         val audioFrames = encode(pcmFrames, format)
             .buffer(AUDIO_FRAMES_KEPT_PER_LISTENER, BufferOverflow.DROP_OLDEST)
@@ -37,7 +40,7 @@ internal class HttpAudioStreamServerStarter @Inject constructor() : HttpAudioStr
 
     private fun encode(pcmFrames: Flow<ByteArray>, format: StreamAudioFormat): Flow<ByteArray> =
         when (format) {
-            StreamAudioFormat.AAC -> AacEncoder().encode(pcmFrames).flowOn(Dispatchers.Default)
+            StreamAudioFormat.AAC -> AacEncoder(settingsRepository.currentSettings.aacQuality.bitsPerSecond).encode(pcmFrames).flowOn(Dispatchers.Default)
             StreamAudioFormat.LPCM -> pcmFrames.map { pcmFrame -> toBigEndianSamples(pcmFrame) }
             StreamAudioFormat.WAV -> pcmFrames
         }

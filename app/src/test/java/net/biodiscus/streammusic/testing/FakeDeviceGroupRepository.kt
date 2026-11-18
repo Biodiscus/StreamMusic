@@ -28,4 +28,8 @@ class FakeDeviceGroupRepository : DeviceGroupRepository {
     override fun deleteGroup(name: String) {
         groups.value = groups.value.withoutGroup(name)
     }
+
+    override fun deleteAllGroups() {
+        groups.value = emptyList()
+    }
 }

@@ -14,4 +14,6 @@ interface DeviceGroupRepository {
     fun updateGroup(oldName: String, group: DeviceGroup)
 
     fun deleteGroup(name: String)
+
+    fun deleteAllGroups()
 }

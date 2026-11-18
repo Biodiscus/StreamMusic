@@ -2,12 +2,10 @@ package net.biodiscus.streammusic.feature.settings
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,11 +14,9 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -35,16 +31,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import net.biodiscus.streammusic.R
 import net.biodiscus.streammusic.core.model.AIRPLAY_AUDIO_DELAY_STEP_MILLIS
+import net.biodiscus.streammusic.core.model.AacQuality
 import net.biodiscus.streammusic.core.model.AppSettings
 import net.biodiscus.streammusic.core.model.MAX_AIRPLAY_AUDIO_DELAY_MILLIS
 import net.biodiscus.streammusic.core.model.ProtocolFamily
+import net.biodiscus.streammusic.core.model.SilenceTimeout
 import net.biodiscus.streammusic.core.model.StreamAudioFormat
+import net.biodiscus.streammusic.core.model.ThemeMode
 import net.biodiscus.streammusic.core.model.audioFormatOf
 import net.biodiscus.streammusic.core.model.isEnabled
 import net.biodiscus.streammusic.ui.ThemePreviews
@@ -59,6 +57,12 @@ internal class SettingsActions(
     val onAudioFormatChosen: (ProtocolFamily, StreamAudioFormat) -> Unit,
     val onAirPlayAudioDelayChanged: (Int) -> Unit,
     val onDisconnectsChromecastOnMuteChanged: (Boolean) -> Unit,
+    val onThemeModeChosen: (ThemeMode) -> Unit,
+    val onMutesPhoneWhileStreamingChanged: (Boolean) -> Unit,
+    val onReconnectsDroppedDevicesChanged: (Boolean) -> Unit,
+    val onAacQualityChosen: (AacQuality) -> Unit,
+    val onStopsStreamingAfterSilenceChosen: (SilenceTimeout) -> Unit,
+    val onResetAllDataConfirmed: () -> Unit,
 )
 
 @Composable
@@ -76,6 +80,12 @@ internal fun SettingsRoute(
         onAudioFormatChosen = viewModel::onAudioFormatChosen,
         onAirPlayAudioDelayChanged = viewModel::onAirPlayAudioDelayChanged,
         onDisconnectsChromecastOnMuteChanged = viewModel::onDisconnectsChromecastOnMuteChanged,
+        onThemeModeChosen = viewModel::onThemeModeChosen,
+        onMutesPhoneWhileStreamingChanged = viewModel::onMutesPhoneWhileStreamingChanged,
+        onReconnectsDroppedDevicesChanged = viewModel::onReconnectsDroppedDevicesChanged,
+        onAacQualityChosen = viewModel::onAacQualityChosen,
+        onStopsStreamingAfterSilenceChosen = viewModel::onStopsStreamingAfterSilenceChosen,
+        onResetAllDataConfirmed = viewModel::onResetAllDataConfirmed,
     )
     SettingsScreen(
         settings = settings,
@@ -115,13 +125,8 @@ internal fun SettingsScreen(
                 .padding(contentPadding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            SectionHeader(stringResource(R.string.settings_general_header))
-            SwitchSetting(
-                title = stringResource(R.string.settings_hide_single_app_capture),
-                description = stringResource(R.string.settings_hide_single_app_capture_description),
-                isChecked = settings.hidesSingleAppCapture,
-                onCheckedChange = actions.onHidesSingleAppCaptureChanged,
-            )
+            GeneralSettings(settings, actions)
+            StreamingSettings(settings, actions)
 
             SectionHeader(stringResource(R.string.settings_protocols_header))
             ProtocolFamily.entries.forEach { family ->
@@ -141,6 +146,9 @@ internal fun SettingsScreen(
                 leadingContent = { Icon(Icons.Filled.Description, contentDescription = null) },
                 modifier = Modifier.clickable(onClick = onSessionLogClicked),
             )
+
+            AboutSettings()
+            ResetSettings(onResetConfirmed = actions.onResetAllDataConfirmed)
         }
     }
 }
@@ -202,10 +210,12 @@ private fun FamilyOptions(
     actions: SettingsActions,
 ) {
     if (family.selectableAudioFormats.isNotEmpty()) {
-        AudioFormatChoice(
-            formats = family.selectableAudioFormats,
-            chosenFormat = settings.audioFormatOf(family),
-            onFormatChosen = { format -> actions.onAudioFormatChosen(family, format) },
+        ChoiceSetting(
+            title = stringResource(R.string.settings_audio_format),
+            options = family.selectableAudioFormats,
+            chosenOption = settings.audioFormatOf(family),
+            labelOf = { format -> format.displayName },
+            onOptionChosen = { format -> actions.onAudioFormatChosen(family, format) },
         )
     }
     if (showsAirPlayAudioDelay(family, settings)) {
@@ -240,26 +250,6 @@ private fun showsAirPlayAudioDelay(family: ProtocolFamily, settings: AppSettings
     family == ProtocolFamily.AIRPLAY || (family == ProtocolFamily.AIRPLAY_2 && !settings.isEnabled(ProtocolFamily.AIRPLAY))
 
 @Composable
-private fun AudioFormatChoice(
-    formats: List<StreamAudioFormat>,
-    chosenFormat: StreamAudioFormat,
-    onFormatChosen: (StreamAudioFormat) -> Unit,
-) {
-    Column(Modifier.padding(horizontal = 16.dp)) {
-        Text(stringResource(R.string.settings_audio_format), style = MaterialTheme.typography.bodyMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            formats.forEach { format ->
-                FilterChip(
-                    selected = format == chosenFormat,
-                    onClick = { onFormatChosen(format) },
-                    label = { Text(format.displayName) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun AudioDelaySetting(delayMillis: Int, onDelayChanged: (Int) -> Unit) {
     val stepCount = MAX_AIRPLAY_AUDIO_DELAY_MILLIS / AIRPLAY_AUDIO_DELAY_STEP_MILLIS
     ListItem(
@@ -278,32 +268,6 @@ private fun AudioDelaySetting(delayMillis: Int, onDelayChanged: (Int) -> Unit) {
     )
 }
 
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
-    )
-}
-
-@Composable
-private fun SwitchSetting(
-    title: String,
-    isChecked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    description: String? = null,
-) {
-    ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = description?.let { text -> { Text(text) } },
-        trailingContent = { Switch(checked = isChecked, onCheckedChange = null) },
-        modifier = modifier.toggleable(value = isChecked, role = Role.Switch, onValueChange = onCheckedChange),
-    )
-}
-
 @ThemePreviews
 @Composable
 private fun SettingsScreenPreview() {
@@ -316,6 +280,12 @@ private fun SettingsScreenPreview() {
                 onAudioFormatChosen = { _, _ -> },
                 onAirPlayAudioDelayChanged = {},
                 onDisconnectsChromecastOnMuteChanged = {},
+                onThemeModeChosen = {},
+                onMutesPhoneWhileStreamingChanged = {},
+                onReconnectsDroppedDevicesChanged = {},
+                onAacQualityChosen = {},
+                onStopsStreamingAfterSilenceChosen = {},
+                onResetAllDataConfirmed = {},
             ),
             onBackClicked = {},
             onDiscoveryDebugClicked = {},

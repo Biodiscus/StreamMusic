@@ -7,6 +7,32 @@ enum class StreamAudioFormat(val displayName: String) {
     WAV("WAV"),
 }
 
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+fun ThemeMode.usesDarkTheme(isSystemDark: Boolean): Boolean = when (this) {
+    ThemeMode.SYSTEM -> isSystemDark
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
+
+/** How many bits per second the AAC stream uses. More sounds better and needs a better Wi-Fi connection. */
+enum class AacQuality(val bitsPerSecond: Int) {
+    LOW(128_000),
+    STANDARD(192_000),
+    HIGH(256_000),
+}
+
+/** How long the phone must play nothing before streaming stops by itself. */
+enum class SilenceTimeout(val minutes: Int) {
+    NEVER(0),
+    FIVE_MINUTES(5),
+    FIFTEEN_MINUTES(15),
+    THIRTY_MINUTES(30),
+    ONE_HOUR(60),
+}
+
+fun SilenceTimeout.isOn(): Boolean = this != SilenceTimeout.NEVER
+
 /**
  * A group of protocols that the user switches on or off together, because they are one kind of device to them.
  * [selectableAudioFormats] is empty when the devices do not pull an HTTP stream, or when there is no choice to make.
@@ -44,6 +70,13 @@ data class AppSettings(
     val airPlayAudioDelayMillis: Int = 0,
     /** Stops streaming to a Chromecast as soon as it is muted. */
     val disconnectsChromecastOnMute: Boolean = false,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /** Turns the volume of the phone's own music to zero while streaming, so only the devices play. */
+    val mutesPhoneWhileStreaming: Boolean = true,
+    /** Connects again to a device that was streaming and then lost its connection. */
+    val reconnectsDroppedDevices: Boolean = true,
+    val aacQuality: AacQuality = AacQuality.STANDARD,
+    val stopsStreamingAfterSilence: SilenceTimeout = SilenceTimeout.NEVER,
 )
 
 fun AppSettings.isEnabled(family: ProtocolFamily): Boolean =

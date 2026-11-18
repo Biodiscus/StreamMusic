@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.biodiscus.streammusic.core.model.StreamingDevice
+import net.biodiscus.streammusic.core.streaming.device.DeviceEndedOnPurposeException
 import net.biodiscus.streammusic.core.streaming.device.DeviceStreamer
 import net.biodiscus.streammusic.core.streaming.device.SessionAudio
 import timber.log.Timber
@@ -18,6 +19,9 @@ private const val LAUNCH_REQUEST_ID = 1
 private const val LOAD_REQUEST_ID = 2
 private const val STOP_REQUEST_ID = 3
 private val LOAD_FAILURE_TYPES = setOf("LOAD_FAILED", "LOAD_CANCELLED", "INVALID_REQUEST")
+
+// A person stopped the player, or sent something else to the Chromecast. Playing again would fight them.
+private val IDLE_REASONS_OF_A_PERSON = setOf("CANCELLED", "INTERRUPTED")
 
 /** Streams to a Chromecast by starting its built-in media player and telling it to play our HTTP stream. */
 internal class ChromecastDeviceStreamer(
@@ -77,7 +81,13 @@ private class CastConversation(
             val message = receiveWithoutHeartbeats()
             if (payloadType(message.payload) != "MEDIA_STATUS") continue
             val idleReason = findIdleReason(message.payload)
-            if (idleReason != null) failBecauseOf("Chromecast stopped playing: $idleReason", message.payload)
+            if (idleReason != null) {
+                failBecauseOf(
+                    "Chromecast stopped playing: $idleReason",
+                    message.payload,
+                    endedOnPurpose = idleReason in IDLE_REASONS_OF_A_PERSON,
+                )
+            }
         }
     }
 
@@ -138,16 +148,16 @@ private class CastConversation(
     }
 
     /** The Chromecast explains itself in the payload, which the short error message for the screen cannot hold. */
-    private fun failBecauseOf(problem: String, payload: String): Nothing {
+    private fun failBecauseOf(problem: String, payload: String, endedOnPurpose: Boolean = false): Nothing {
         Timber.w("%s. The Chromecast said: %s", problem, payload)
-        throw IOException(problem)
+        throw if (endedOnPurpose) DeviceEndedOnPurposeException(problem) else IOException(problem)
     }
 
     private fun failWhenMutedOnPurpose(message: CastMessage) {
         val isMutedNow = findMuted(message.payload) ?: return
         val wasUnmuted = isMuted == false
         isMuted = isMutedNow
-        if (disconnectsOnMute && isMutedNow && wasUnmuted) throw IOException("Chromecast was muted")
+        if (disconnectsOnMute && isMutedNow && wasUnmuted) throw DeviceEndedOnPurposeException("Chromecast was muted")
     }
 
     private suspend fun stopMediaPlayerIgnoringErrors() {

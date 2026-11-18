@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import net.biodiscus.streammusic.core.discovery.DeviceRepository
 import net.biodiscus.streammusic.core.groups.DeviceGroupRepository
 import net.biodiscus.streammusic.core.protocolchoices.ProtocolChoiceRepository
@@ -48,6 +49,10 @@ internal class DevicesViewModel @Inject constructor(
     private val selectedDeviceIds = MutableStateFlow(deviceIdsInStream(streamingStateRepository.state.value))
     private val chosenProtocolByDeviceId = MutableStateFlow(protocolChoiceRepository.load())
     private val searchNumber = MutableStateFlow(0)
+
+    init {
+        forgetChosenProtocolsWhenTheyAreCleared()
+    }
 
     val uiState: StateFlow<DevicesUiState> =
         combine(
@@ -128,6 +133,12 @@ internal class DevicesViewModel @Inject constructor(
         deviceRepository.forgetAllDevices()
         if (!isStreaming()) selectedDeviceIds.value = emptySet()
         searchNumber.update { number -> number + 1 }
+    }
+
+    private fun forgetChosenProtocolsWhenTheyAreCleared() {
+        viewModelScope.launch {
+            protocolChoiceRepository.observeClears().collect { chosenProtocolByDeviceId.value = emptyMap() }
+        }
     }
 
     private fun isStreaming(): Boolean = streamingStateRepository.state.value is StreamingState.Active
