@@ -1,6 +1,21 @@
+<img src="docs/play-store/feature-graphic.png" alt="StreamMusic: stream your phone's audio to several speakers and TVs at once">
+
 # StreamMusic
 
 Stream your phone's audio to several speakers and TVs on your Wi-Fi at once. No Play Services, no account, no cloud.
+
+## Testers wanted
+
+StreamMusic is almost on Google Play, and I'm looking for testers.
+
+You need an Android 14+ phone and a speaker or TV on your Wi-Fi (Chromecast, Sonos, AirPlay, DLNA, HEOS, Samsung Multiroom or AriaCast).
+
+To join:
+1. Email [streammusic@biodiscus.net](mailto:streammusic@biodiscus.net) with the Google account (Gmail address) you use on the Play Store.
+2. I add you to the test list and send you a link back.
+3. Open the link on your phone, accept the invitation and install StreamMusic from Google Play.
+
+I only use your address to add you to the test list. Questions and bug reports are welcome in [issues](https://github.com/Biodiscus/StreamMusic/issues).
 
 <p>
   <img src="docs/screenshots/devices-light.png" width="200" alt="Devices found on the network and a saved group">
@@ -55,3 +70,7 @@ JDK 21 and the Android SDK.
 ```
 
 How the code is organised: [CLAUDE.md](CLAUDE.md).
+
+## License
+
+GNU General Public License v3.0, see [LICENSE](LICENSE). [Privacy policy](docs/PRIVACY_POLICY.md).

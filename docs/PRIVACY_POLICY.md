@@ -27,13 +27,11 @@ The app keeps a short log of the current session in memory (the latest 500 lines
 
 ## Permissions
 
-| Permission | Why |
-|---|---|
-| Microphone (`RECORD_AUDIO`) | Required by Android to capture the audio your phone plays. |
-| Screen sharing (system dialog) | Lets you allow audio capture for a streaming session. |
-| Local network access (`ACCESS_LOCAL_NETWORK`), Internet, network and Wi-Fi state, multicast | Find and talk to devices on your local network. |
-| Notifications | Show the notification with a Stop button while streaming. |
-| Foreground service | Keep streaming while the app is in the background. |
+- **Microphone (`RECORD_AUDIO`):** required by Android to capture the audio your phone plays.
+- **Screen sharing (system dialog):** lets you allow audio capture for a streaming session.
+- **Local network access (`ACCESS_LOCAL_NETWORK`), Internet, network and Wi-Fi state, multicast:** find and talk to devices on your local network.
+- **Notifications:** show the notification with a Stop button while streaming.
+- **Foreground service:** keep streaming while the app is in the background.
 
 The app's network traffic goes to devices on your local network. It does not contact any server on the internet.
 
@@ -44,7 +42,7 @@ The developer receives no data from the app, so there is nothing to sell or shar
 The app stores its settings and saved groups in its private storage. If you use Android's backup feature, Android may include this data in your device backup, under the terms of your backup provider (for example Google).
 
 ## Open source
-StreamMusic is open source. You can read the code, and check for yourself what the app does, at [github.com/Biodiscus/StreamMusic](https://github.com/Biodiscus/StreamMusic).
+StreamMusic is free software, licensed under the GNU General Public License v3.0. You can read the code, and check for yourself what the app does, at [github.com/Biodiscus/StreamMusic](https://github.com/Biodiscus/StreamMusic).
 
 ## Children
 The app is not directed at children and collects no personal data from anyone.
